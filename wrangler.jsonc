@@ -1,0 +1,19 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "suisei-closet",
+	"pages_build_output_dir": "./dist",
+	"compatibility_date": "2026-11-01",
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "suisei-closet",
+			"database_id": "83d58584-5d30-432d-9dee-c0c9d4ae8914"
+		}
+	],
+	"vars": {
+		"APP_ORIGIN": "https://suisei-closet.pages.dev/",
+		"DISCORD_CLIENT_ID": "1571121216800952331",
+		"DISCORD_REDIRECT_URI": "https://suisei-closet.pages.dev/auth/callback",
+		"OAUTH_ENABLED": "true"
+	}
+}

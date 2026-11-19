@@ -1,0 +1,4 @@
+リモートを丸ごとローカルにコピーする方法
+1. npx wrangler d1 export suisei-closet --remote --output=./backup.sql
+2. .wrangler/state/v3/d1をフォルダごと削除
+3. npx wrangler d1 execute DB --local --file=./backup.sql

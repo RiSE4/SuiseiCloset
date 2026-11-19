@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1100" viewBox="0 0 1600 1100">
+  <defs>
+    <radialGradient id="nebula"><stop stop-color="#7970d9" stop-opacity=".3"/><stop offset=".5" stop-color="#354a91" stop-opacity=".16"/><stop offset="1" stop-color="#11102d" stop-opacity="0"/></radialGradient>
+    <linearGradient id="tail"><stop stop-color="#beeaff" stop-opacity="0"/><stop offset="1" stop-color="#e0f8ff"/></linearGradient>
+    <pattern id="stars" width="311" height="283" patternUnits="userSpaceOnUse"><g fill="#dcecff"><circle cx="29" cy="51" r=".8" opacity=".7"/><circle cx="172" cy="24" r=".7" opacity=".4"/><circle cx="269" cy="119" r="1" opacity=".65"/><circle cx="103" cy="194" r=".7" opacity=".5"/><circle cx="223" cy="251" r=".6" opacity=".4"/><circle cx="54" cy="257" r=".5" opacity=".55"/><circle cx="157" cy="110" r=".5" opacity=".45"/></g></pattern>
+  </defs>
+  <ellipse cx="1060" cy="340" rx="850" ry="330" transform="rotate(-28 1060 340)" fill="url(#nebula)"/>
+  <ellipse cx="200" cy="850" rx="650" ry="350" fill="url(#nebula)" opacity=".65"/>
+  <path d="M1150 75 873 267" stroke="url(#tail)" stroke-width="1.4"/><circle cx="873" cy="267" r="2" fill="#e4faff"/>
+  <path d="m1470 370-127 88" stroke="url(#tail)" stroke-width=".7" opacity=".55"/>
+  <path d="m430 80-130 90" stroke="url(#tail)" stroke-width=".7" opacity=".35"/>
+  <path d="m1288 167 2 7 7 2-7 2-2 7-2-7-7-2 7-2Z" fill="#d8b7a8" opacity=".8"/>
+  <path d="m172 420 1.5 5 5 1.5-5 1.5-1.5 5-1.5-5-5-1.5 5-1.5Z" fill="#c6deff" opacity=".6"/>
+  <path d="m1410 780 1.5 5 5 1.5-5 1.5-1.5 5-1.5-5-5-1.5 5-1.5Z" fill="#d8b7a8" opacity=".6"/>
+  <path d="m1120 435 80-40 72 62 95-14" fill="none" stroke="#a9c4ff" stroke-opacity=".1"/>
+  <g fill="#b9d3ff" opacity=".6"><circle cx="1120" cy="435" r="1.7"/><circle cx="1200" cy="395" r="2"/><circle cx="1272" cy="457" r="1.7"/><circle cx="1367" cy="443" r="1.5"/></g>
+  <path fill="url(#stars)" d="M0 0h1600v1100H0z"/>
+</svg>

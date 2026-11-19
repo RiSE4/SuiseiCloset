@@ -1,0 +1,40 @@
+{
+  "name": "suisei-closet",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wrangler pages dev public --ip 127.0.0.1 --port 8789 --local-protocol=https\"",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "wrangler pages dev dist",
+    "db:init": "wrangler d1 execute suisei-closet --local --file=docs/DDL.sql",
+    "db:dev-user": "wrangler d1 execute suisei-closet --local --file=scripts/dev-user.sql",
+    "db:setup": "npm run db:init && npm run db:dev-user",
+    "db:csv": "node --experimental-strip-types scripts/import-costumes-csv.mjs"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.3.1",
+    "@fortawesome/free-solid-svg-icons": "^7.3.1",
+    "@fortawesome/vue-fontawesome": "^3.3.3",
+    "sortablejs": "^1.15.7",
+    "vue": "3.5.45",
+    "vue-router": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261113.1",
+    "@types/node": "^22.15.29",
+    "@types/sortablejs": "^1.15.9",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-vue": "6.0.2",
+    "concurrently": "9.2.5",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3",
+    "vite": "7.3.8",
+    "vue-tsc": "3.1.0",
+    "wrangler": "4.161.0"
+  },
+  "volta": {
+    "node": "22.16.0",
+    "npm": "11.6.2"
+  }
+}

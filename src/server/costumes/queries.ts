@@ -9,17 +9,25 @@ import { paging } from './validation';
 export const columnList = 'id,name,debut_date,category,description,thumbnail_url,family_key,keywords_json,search_text,is_published,created_at,updated_at';
 
 /** D1列定義：関連資料 */
-export const sourceColumns = 'id,costume_id,source_type,title,thumbnail_url,source_url,sort_order,created_at,updated_at';
+export const sourceColumns = 'id,costume_id,title,thumbnail_url,source_url,sort_order,created_at,updated_at';
+
+/** 一覧の参照元は、詳細と同じ並び順で先頭の資料を使う。 */
+const summaryColumns = `${columnList.split(',').map(column => `c.${column}`).join(',')}, s.id AS source_id, s.source_url`;
+const summaryFrom = `costume c LEFT JOIN costume_source s ON s.id = (
+  SELECT id FROM costume_source WHERE costume_id = c.id ORDER BY sort_order, id LIMIT 1
+)`;
+type SummaryRow = Costume & { source_id: number | null; source_url: string | null };
 
 /** D1の衣装レコードを、画面用DTOに変換 */
-const summary = (row: Costume): CostumeSummaryDto => ({
+const summary = (row: SummaryRow): CostumeSummaryDto => ({
   id: row.id, name: row.name, debutYear: row.debut_date ? Number(row.debut_date.slice(0, 4)) : null, category: row.category,
   description: row.description, thumbnailUrl: row.thumbnail_url,
+  primarySource: row.source_id === null || row.source_url === null ? null : { id: row.source_id, sourceUrl: row.source_url },
 });
 
 /** D1の資料レコードを、画面用DTOに変換 */
 export const sourceDto = (row: CostumeSource): CostumeSourceDto => ({
-  id: row.id, sourceType: row.source_type, title: row.title,
+  id: row.id, title: row.title,
   thumbnailUrl: row.thumbnail_url, sourceUrl: row.source_url, sortOrder: row.sort_order,
 });
 
@@ -75,8 +83,8 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
 
   const totalQuery = `SELECT count(*) AS total FROM costume WHERE ${where}`;
   const totalResult = await ctx.env.DB.prepare(totalQuery).bind(...params).first<{ total: number }>();
-  const dataQuery = `SELECT ${columnList} FROM costume WHERE ${where} ORDER BY debut_date DESC, id LIMIT ? OFFSET ?`;
-  const rows = await ctx.env.DB.prepare(dataQuery).bind(...params, limit, offset).all<Costume>();
+  const dataQuery = `SELECT ${summaryColumns} FROM ${summaryFrom} WHERE ${where} ORDER BY c.debut_date DESC, c.id LIMIT ? OFFSET ?`;
+  const rows = await ctx.env.DB.prepare(dataQuery).bind(...params, limit, offset).all<SummaryRow>();
 
   const items = rows.results.map((row) => {
     const baseSummary = summary(row);
@@ -113,8 +121,8 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
  * 衣装の詳細情報を取得
  */
 export async function detail(ctx: Context, id: string, admin: boolean, status = 200): Promise<Response> {
-  const costumeQuery = `SELECT ${columnList} FROM costume WHERE id = ?${admin ? '' : ' AND is_published = 1'}`;
-  const row = await ctx.env.DB.prepare(costumeQuery).bind(id).first<Costume>();
+  const costumeQuery = `SELECT ${summaryColumns} FROM ${summaryFrom} WHERE c.id = ?${admin ? '' : ' AND is_published = 1'}`;
+  const row = await ctx.env.DB.prepare(costumeQuery).bind(id).first<SummaryRow>();
 
   if (!row) {
     return fail('衣装が見つかりません', 404);
@@ -125,20 +133,20 @@ export async function detail(ctx: Context, id: string, admin: boolean, status = 
     SELECT ${sourceColumns} 
     FROM costume_source 
     WHERE costume_id = ? 
-    ORDER BY CASE source_type WHEN 'THREE_VIEW' THEN 0 WHEN 'VIDEO' THEN 1 ELSE 2 END, sort_order, id
+    ORDER BY sort_order, id
   `;
   const sourcesResult = await ctx.env.DB.prepare(sourceQuery).bind(id).all<CostumeSource>();
 
   // 3. 同じfamily_keyを持つ関連衣装の取得（自分自身は除外）
-  let relatedResults: Costume[] = [];
+  let relatedResults: SummaryRow[] = [];
   if (row.family_key) {
     const relatedQuery = `
-      SELECT ${columnList} 
-      FROM costume 
-      WHERE family_key = ? AND id <> ?${admin ? '' : ' AND is_published = 1'} 
-      ORDER BY debut_date DESC, id
+      SELECT ${summaryColumns}
+      FROM ${summaryFrom}
+      WHERE family_key = ? AND c.id <> ?${admin ? '' : ' AND is_published = 1'}
+      ORDER BY c.debut_date DESC, c.id
     `;
-    const relatedResponse = await ctx.env.DB.prepare(relatedQuery).bind(row.family_key, id).all<Costume>();
+    const relatedResponse = await ctx.env.DB.prepare(relatedQuery).bind(row.family_key, id).all<SummaryRow>();
     relatedResults = relatedResponse.results;
   }
 

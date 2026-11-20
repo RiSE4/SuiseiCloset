@@ -9,16 +9,10 @@ import { allocateCostumeIdSql, nextCostumeIdSql } from '../src/server/costumes/c
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const baseHeaders = ['衣装名', '初出日（yyyy-mm-dd）', '説明', '共通サムネイルURL', 'キーワード（カンマ区切り）'];
-const sourceHeaders = ['資料区分', '資料タイトル', '参照先URL', '画像URL'];
+const sourceHeaders = ['資料タイトル', '参照先URL', '画像URL'];
 export const csvHeaders = [...baseHeaders, ...Array.from({ length: 5 }, (_, i) => sourceHeaders.map(key => `${key}${i + 1}`)).flat()];
-const sourceTypes = new Map([
-  ['THREE_VIEW', 'THREE_VIEW'], ['三面図・設定画', 'THREE_VIEW'],
-  ['VIDEO', 'VIDEO'], ['元配信・元動画', 'VIDEO'],
-  ['OTHER', 'OTHER'], ['その他資料', 'OTHER'],
-]);
-const typeOrder = ['THREE_VIEW', 'VIDEO', 'OTHER'];
 
-// ExcelのCSV（引用符内のカンマ・改行・二重引用符、CRLF、UTF-8 BOM）を扱う。
+// ExcelのCSV（出典符内のカンマ・改行・二重出典符、CRLF、UTF-8 BOM）を扱う。
 export function parseCsv(input) {
   const text = input.replace(/^\uFEFF/, '');
   const rows = [];
@@ -44,11 +38,11 @@ export function parseCsv(input) {
       line++; rowLine = line;
     } else if (char === '"' && !field && !closed) quoted = true;
     else {
-      if (closed || char === '"') throw Error(`CSV ${line}行目: 引用符の使い方が不正です`);
+      if (closed || char === '"') throw Error(`CSV ${line}行目: 出典符の使い方が不正です`);
       field += char;
     }
   }
-  if (quoted) throw Error(`CSV ${rowLine}行目: 引用符が閉じていません`);
+  if (quoted) throw Error(`CSV ${rowLine}行目: 出典符が閉じていません`);
   if (cells.length || field || closed) endRow();
   return rows.filter(row => row.cells.some(cell => cell.trim()));
 }
@@ -94,20 +88,16 @@ export function readCostumesCsv(input) {
       for (let number = 1; number <= 5; number++) {
         const values = sourceHeaders.map(key => record[`${key}${number}`] ?? '');
         if (values.every(value => !value.trim())) continue;
-        const sourceType = sourceTypes.get(values[0].trim());
-        if (!sourceType) throw Error(`資料区分${number}は三面図・設定画 / 元配信・元動画 / その他資料（またはTHREE_VIEW / VIDEO / OTHER）にしてください`);
         sources.push({
-          number, sourceType,
-          title: textField(values[1], `資料タイトル${number}`, 150, true),
-          sourceUrl: urlField(values[2], `参照先URL${number}`, true),
-          thumbnailUrl: urlField(values[3], `画像URL${number}`),
+          number,
+          title: textField(values[0], `資料タイトル${number}`, 150, true),
+          sourceUrl: urlField(values[1], `参照先URL${number}`, true),
+          thumbnailUrl: urlField(values[2], `画像URL${number}`),
         });
       }
-      // 同一区分ではCSVの左から順。区分をまたぐ順番は管理画面と共通。
-      sources.sort((a, b) => typeOrder.indexOf(a.sourceType) - typeOrder.indexOf(b.sourceType) || a.number - b.number);
       return { line: row.line, name, debutDate, description, thumbnailUrl, keywords,
         searchText: makeSearchText(name, keywords),
-        sources: sources.map((source, sortOrder) => ({ ...source, sortOrder })) };
+        sources: sources.map((source, sortOrder) => ({ ...source, sortOrder: sortOrder + 1 })) };
     } catch (error) { throw Error(`CSV ${row.line}行目: ${error.message}`, { cause: error }); }
   });
 }
@@ -135,8 +125,8 @@ export function insertCostumes(db, costumes) {
       RETURNING id
     `);
     const insertSource = db.prepare(`
-      INSERT INTO costume_source(costume_id, source_type, title, source_url, thumbnail_url, sort_order)
-      VALUES(?, ?, ?, ?, ?, ?)
+      INSERT INTO costume_source(costume_id, title, source_url, thumbnail_url, sort_order)
+      VALUES(?, ?, ?, ?, ?)
     `);
     const inserted = [];
     for (const costume of costumes) {
@@ -144,7 +134,7 @@ export function insertCostumes(db, costumes) {
       const { id } = insertCostume.get(costume.name, costume.debutDate, costume.description,
         costume.thumbnailUrl, JSON.stringify(costume.keywords), costume.searchText);
       for (const source of costume.sources) {
-        insertSource.run(id, source.sourceType, source.title, source.sourceUrl, source.thumbnailUrl, source.sortOrder);
+        insertSource.run(id, source.title, source.sourceUrl, source.thumbnailUrl, source.sortOrder);
       }
       inserted.push({ id, name: costume.name, sources: costume.sources.length });
     }
@@ -182,7 +172,7 @@ async function main(args) {
     csv: path.resolve(options.csv), costumes: costumes.length,
     sources: costumes.reduce((sum, item) => sum + item.sources.length, 0),
     items: costumes.map(item => ({ line: item.line, name: item.name,
-      sources: item.sources.map(source => ({ column: source.number, type: source.sourceType, title: source.title, sortOrder: source.sortOrder })) })) }, null, 2));
+      sources: item.sources.map(source => ({ column: source.number, title: source.title, sortOrder: source.sortOrder })) })) }, null, 2));
   if (!options.apply) return;
   const dbFile = await localDbPath(options.db);
   const db = new DatabaseSync(dbFile);

@@ -1,4 +1,4 @@
-import type { CostumeCreateRequest, CostumeUpdateRequest, CostumeSourceCreateRequest, CostumeSourceUpdateRequest, SourceType } from '../../features/costumes/costume-model';
+import type { CostumeCreateRequest, CostumeUpdateRequest, CostumeSourceCreateRequest, CostumeSourceUpdateRequest } from '../../features/costumes/costume-model';
 import { normalizeKeyword, validateKeywords } from '../../features/costumes/keywords';
 import { validateHttpsUrl } from '../../features/costumes/validate-https-url';
 import { isValidDebutDate } from '../../features/costumes/debut-date';
@@ -13,13 +13,10 @@ export const has = (body: object, key: string) =>
 const costumeKeys = new Set(['name', 'debutDate', 'category', 'description', 'thumbnailUrl', 'keywords', 'relatedCostumeId', 'isPublished']);
 
 /** 資料の登録・更新で受け付ける項目 */
-const sourceKeys = new Set(['sourceType', 'title', 'thumbnailUrl', 'sourceUrl', 'sortOrder']);
+const sourceKeys = new Set(['title', 'thumbnailUrl', 'sourceUrl']);
 
 /** 衣装IDはcostume-と3桁以上の数字（合計100文字以内）。 */
 export const idPattern = /^costume-\d{3,92}$/;
-
-/** DBと画面で共通の資料区分 */
-const sourceTypes = new Set(['THREE_VIEW', 'VIDEO', 'OTHER']);
 
 /** 
  * 入力不正や対象の未検出などの共通例外
@@ -71,17 +68,6 @@ function requiredUrl(value: unknown, label: string): string {
   const url = nullableUrl(value, label);
   if (!url) throw new InputError(`${label}を入力してください`);
   return url;
-}
-
-/**
- * 表示順を検証し、0〜1,000,000の整数であることを確認
- */
-function order(value: unknown): number {
-  if (!Number.isInteger(value) || Number(value) < 0 || Number(value) > 1_000_000) {
-    throw new InputError('sortOrderが不正です');
-  }
-
-  return Number(value);
 }
 
 /**
@@ -189,9 +175,9 @@ export function sourceInput(body: Record<string, unknown>, create: false): Costu
 export function sourceInput(body: Record<string, unknown>, create: boolean): CostumeSourceUpdateRequest {
   checkKeys(body, sourceKeys);
 
-  //新規登録時の必須項目チェック（区分・タイトル・URL）
-  if (create && (!has(body, 'sourceType') || !has(body, 'title') || !has(body, 'sourceUrl'))) {
-    throw new InputError('資料区分、タイトル、URLが必要です');
+  //新規登録時の必須項目チェック（タイトル・URL）
+  if (create && (!has(body, 'title') || !has(body, 'sourceUrl'))) {
+    throw new InputError('タイトル、URLが必要です');
   }
 
   //更新時の空チェック
@@ -200,17 +186,6 @@ export function sourceInput(body: Record<string, unknown>, create: boolean): Cos
   }
 
   const fields: CostumeSourceUpdateRequest = {};
-
-  //sourceType
-  if (has(body, 'sourceType')) {
-    const sourceType = body.sourceType;
-    const isSourceType = (value: unknown): value is SourceType => typeof value === 'string' && sourceTypes.has(value);
-
-    if (!isSourceType(sourceType)) {
-      throw new InputError('sourceTypeが不正です');
-    }
-    fields.sourceType = sourceType;
-  }
 
   //title
   if (has(body, 'title')) {
@@ -225,11 +200,6 @@ export function sourceInput(body: Record<string, unknown>, create: boolean): Cos
   //sourceUrl
   if (has(body, 'sourceUrl')) {
     fields.sourceUrl = requiredUrl(body.sourceUrl, 'sourceUrl');
-  }
-
-  //sortOrder
-  if (has(body, 'sortOrder')) {
-    fields.sortOrder = order(body.sortOrder);
   }
 
   return fields;

@@ -1,16 +1,9 @@
 /**
- * 資料の区分
- * 三面図・設定画 / 元配信・元動画 / その他の資料
- */
-export type SourceType = 'THREE_VIEW' | 'VIDEO' | 'OTHER';
-
-/**
  * APIで受け渡す衣装資料
  * レコードから画面向けのDTOに変換
  */
 export interface CostumeSourceDto {
   id: number;
-  sourceType: SourceType;
   title: string;
   thumbnailUrl: string | null;
   sourceUrl: string;
@@ -30,6 +23,7 @@ export interface CostumeSummaryDto {
   category: string;
   description: string;
   thumbnailUrl: string | null;
+  primarySource: Pick<CostumeSourceDto, 'id' | 'sourceUrl'> | null;
 }
 
 /**
@@ -88,11 +82,9 @@ export type CostumeUpdateRequest = Partial<CostumeCreateRequest>;
  * 資料の登録データ（URLはhttps必須）  
  */
 export interface CostumeSourceCreateRequest {
-  sourceType: SourceType;
   title: string;
   thumbnailUrl?: string | null;
   sourceUrl: string;
-  sortOrder?: number;
 }
 
 

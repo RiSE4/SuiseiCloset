@@ -69,7 +69,6 @@ BEGIN SELECT RAISE(ABORT, 'keywords_json must contain unique nonempty strings');
 CREATE TABLE costume_source (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   costume_id TEXT NOT NULL REFERENCES costume(id) ON DELETE CASCADE,
-  source_type TEXT NOT NULL CHECK(source_type IN ('THREE_VIEW', 'VIDEO', 'OTHER')),
   title TEXT NOT NULL CHECK(length(trim(title)) > 0),
   thumbnail_url TEXT CHECK(thumbnail_url IS NULL OR thumbnail_url LIKE 'https://%'),
   source_url TEXT NOT NULL CHECK(source_url LIKE 'https://%'),

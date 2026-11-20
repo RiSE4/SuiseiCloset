@@ -3,13 +3,16 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { faShirt } from '@fortawesome/free-solid-svg-icons';
-import type { CostumeDetailDto, SourceType } from '../costume-model';
+import type { CostumeDetailDto } from '../costume-model';
 import { ApiError } from '../../../shared/api/request';
 import { getCostumeDetail } from '../costume-api';
 import { refreshAuth } from '../../auth/auth';
-import { safeExternalUrl } from '../media';
+import { safeExternalUrl, sourceMedia } from '../media';
+import { loadXWidgets } from '../x-widgets';
 import CostumeSourceCard from '../components/CostumeSourceCard.vue';
 import CostumeGrid from '../components/CostumeGrid.vue';
+import SourceAttribution from '../components/SourceAttribution.vue';
+import { vPackedGrid } from '../../../shared/packed-grid';
 
 const route = useRoute();
 
@@ -30,18 +33,7 @@ const from = computed(() => {
   return typeof value === 'string' && (value === '/costumes' || value.startsWith('/costumes?')) ? value : '/costumes';
 });
 
-//資料の区分と見出し
-const groups: { type: SourceType; title: string }[] = [
-  { type: 'THREE_VIEW', title: '三面図・設定画' },
-  { type: 'VIDEO', title: '元配信・元動画' },
-  { type: 'OTHER', title: 'その他資料' },
-];
-
-/** 資料を区分ごとにまとめ、資料がない区分は表示対象から外す */
-const sections = computed(() => groups.map(group => ({
-  ...group,
-  sources: detail.value?.sources.filter(source => source.sourceType === group.type) || []
-})).filter(group => group.sources.length));
+const orderedSources = computed(() => [...(detail.value?.sources ?? [])].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
 
 let controller: AbortController | undefined;
 
@@ -59,6 +51,10 @@ watch([() => route.params.id, retryCount], async () => {
 
   try {
     detail.value = await getCostumeDetail(id, signal);
+    if (!signal.aborted && detail.value.sources.some(source => sourceMedia(source.sourceUrl).kind === 'x')) {
+      // DOM構築やスクロールを待たず、必要な詳細でだけSDKを先行取得する。
+      void loadXWidgets().catch(() => { });
+    }
   } catch (cause) {
     if (signal.aborted) {
       return;
@@ -107,10 +103,13 @@ onBeforeUnmount(() => controller?.abort());
     </nav>
 
     <div class="detail-overview">
-      <div class="detail-hero-image">
-        <img v-if="thumbnail && !imageFailed" :src="thumbnail" :alt="`${detail.name}のサムネイル`" decoding="async"
-          @error="imageFailed = true">
-        <div v-else class="image-placeholder" aria-label="衣装画像は未登録です"><span>✦</span><small>画像未登録</small></div>
+      <div class="detail-thumbnail">
+        <div class="detail-hero-image">
+          <img v-if="thumbnail && !imageFailed" :src="thumbnail" :alt="`${detail.name}のサムネイル`" decoding="async"
+            @error="imageFailed = true">
+          <div v-else class="image-placeholder" aria-label="衣装画像は未登録です"><span>✦</span><small>画像未登録</small></div>
+        </div>
+        <SourceAttribution v-if="detail.primarySource" :source="detail.primarySource" :costume-id="detail.id" link-account />
       </div>
       <div class="detail-info">
         <div class="detail-meta"><span v-if="detail.debutYear">{{ detail.debutYear }}年</span><span
@@ -129,17 +128,17 @@ onBeforeUnmount(() => controller?.abort());
       </div>
     </div>
 
-    <div v-if="sections.length" class="detail-sources">
-      <section v-for="group in sections" :key="group.type" class="detail-section"
-        :aria-labelledby="`source-${group.type}`">
+    <div v-if="orderedSources.length" class="detail-sources">
+      <section class="detail-section" aria-labelledby="sources-title">
         <div class="section-title">
           <div>
             <p class="eyebrow">SOURCES</p>
-            <h2 :id="`source-${group.type}`">{{ group.title }}</h2>
+            <h2 id="sources-title">関連資料</h2>
           </div>
         </div>
-        <div class="source-grid">
-          <CostumeSourceCard v-for="source in group.sources" :key="source.id" :source="source" />
+        <div v-packed-grid class="source-grid packed-grid">
+          <CostumeSourceCard v-for="source in orderedSources" :key="source.id" :source="source"
+            :costume-id="detail.id" />
         </div>
       </section>
     </div>
@@ -152,7 +151,7 @@ onBeforeUnmount(() => controller?.abort());
         </div>
       </div>
       <div class="related-grid">
-        <CostumeGrid :items="detail.relatedCostumes" :from="from" related />
+        <CostumeGrid :items="detail.relatedCostumes" :from="from" />
       </div>
     </section>
   </article>

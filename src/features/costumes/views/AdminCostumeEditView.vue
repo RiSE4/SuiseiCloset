@@ -15,6 +15,7 @@ import { adminListBackPath } from '../admin-list-navigation';
 import KeywordInput from '../components/KeywordInput.vue';
 import RelatedCostumeSelector from '../components/RelatedCostumeSelector.vue';
 import CostumeSourceEditor from '../components/CostumeSourceEditor.vue';
+import SourceAttribution from '../components/SourceAttribution.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -33,6 +34,8 @@ const relatedCostumes = ref<CostumeSummaryDto[]>([]);
 const relatedTouched = ref(false);
 /** 資料は子のエディターで個別保存するため、基本情報のformには含めない  */
 const sources = ref<CostumeSourceDto[]>([]);
+/** 公開詳細と同じく、保存済みの表示順で先頭の資料を共通サムネイルの参照元にする。 */
+const primarySource = computed(() => [...sources.value].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)[0]);
 /** 読み込みまたは保存が完了した時点のフォームを、未保存判定の比較元にする  */
 const baseline = ref(JSON.stringify(form));
 /** 基本情報の差分、または関連先の操作があれば未保存と判定する  */
@@ -393,6 +396,8 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
               </Transition>
             </div>
           </Transition>
+          <SourceAttribution v-if="form.thumbnailUrl && primarySource" class="admin-thumbnail-attribution"
+            :source="primarySource" :costume-id="id" admin />
         </section>
 
         <section class="admin-section" aria-labelledby="keywords-title">

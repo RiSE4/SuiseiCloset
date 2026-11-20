@@ -7,6 +7,7 @@ import type { CostumeSourceDto } from '../costume-model';
 import { validateHttpsUrl } from '../validate-https-url';
 import { safeExternalUrl, sourceMediaLabel, youtubeThumbnailUrl } from '../media';
 import SourceEditForm from './SourceEditForm.vue';
+import SourceAttribution from './SourceAttribution.vue';
 import { ApiError } from '../../../shared/api/request';
 import { createCostumeSource, deleteCostumeSource, reorderCostumeSources, updateCostumeSource } from '../costume-api';
 
@@ -235,7 +236,13 @@ defineExpose({ saveOrder });
             </div>
           </div>
           <SourceEditForm v-if="editingId === source.id" :id="`source-edit-${source.id}`" class="source-inline-editor"
-            :form="editForm" :disabled="locked" :busy="busy" editing @save="save(true)" @cancel="closeEdit" />
+            :form="editForm" :disabled="locked" :busy="busy" editing @save="save(true)" @cancel="closeEdit">
+            <template #attribution>
+              <SourceAttribution v-if="editForm.sourceUrl.trim() === source.sourceUrl" :source="source"
+                :costume-id="costumeId" admin />
+              <p v-else-if="safeExternalUrl(editForm.sourceUrl.trim())" class="source-attribution">参照元：{{ safeExternalUrl(editForm.sourceUrl.trim()) }}</p>
+            </template>
+          </SourceEditForm>
 
         </article>
       </TransitionGroup>

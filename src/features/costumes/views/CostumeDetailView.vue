@@ -11,6 +11,7 @@ import { safeExternalUrl, sourceMedia } from '../media';
 import { loadXWidgets } from '../x-widgets';
 import CostumeSourceCard from '../components/CostumeSourceCard.vue';
 import CostumeGrid from '../components/CostumeGrid.vue';
+import SourceAttribution from '../components/SourceAttribution.vue';
 import { vPackedGrid } from '../../../shared/packed-grid';
 
 const route = useRoute();
@@ -102,10 +103,13 @@ onBeforeUnmount(() => controller?.abort());
     </nav>
 
     <div class="detail-overview">
-      <div class="detail-hero-image">
-        <img v-if="thumbnail && !imageFailed" :src="thumbnail" :alt="`${detail.name}のサムネイル`" decoding="async"
-          @error="imageFailed = true">
-        <div v-else class="image-placeholder" aria-label="衣装画像は未登録です"><span>✦</span><small>画像未登録</small></div>
+      <div class="detail-thumbnail">
+        <div class="detail-hero-image">
+          <img v-if="thumbnail && !imageFailed" :src="thumbnail" :alt="`${detail.name}のサムネイル`" decoding="async"
+            @error="imageFailed = true">
+          <div v-else class="image-placeholder" aria-label="衣装画像は未登録です"><span>✦</span><small>画像未登録</small></div>
+        </div>
+        <SourceAttribution v-if="detail.primarySource" :source="detail.primarySource" :costume-id="detail.id" link-account />
       </div>
       <div class="detail-info">
         <div class="detail-meta"><span v-if="detail.debutYear">{{ detail.debutYear }}年</span><span

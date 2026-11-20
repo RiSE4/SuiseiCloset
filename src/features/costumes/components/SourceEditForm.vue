@@ -24,7 +24,9 @@ const thumbnailInput = computed({
         <input v-model="thumbnailInput" type="url" maxlength="2048" pattern="https://.*" :disabled="disabled"
           :readonly="Boolean(automaticThumbnail)" placeholder="https://...">
       </label>
-      <SourceEditPreview class="wide" :source-url="form.sourceUrl" :image-url="thumbnailInput" :title="form.title" />
+      <SourceEditPreview class="wide" :source-url="form.sourceUrl" :image-url="thumbnailInput" :title="form.title">
+        <template #attribution><slot name="attribution" /></template>
+      </SourceEditPreview>
     </div>
     <div class="row-actions">
       <button type="submit" class="button primary" :disabled="disabled">{{ busy ? '保存中…' : editing ? '資料の変更を保存' :

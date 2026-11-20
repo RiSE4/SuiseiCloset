@@ -905,6 +905,16 @@ input::placeholder {
   margin: auto
 }
 
+.detail-thumbnail {
+  min-width: 0;
+  align-self: center;
+}
+
+.detail-thumbnail > .source-attribution {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
 .detail-hero-image {
   height: min(53vw, 460px);
   min-height: 260px;
@@ -1893,7 +1903,6 @@ body {
   }
 
   .detail-overview .detail-hero-image {
-    align-self: center;
     height: auto;
     min-height: 0;
     min-width: 0;
@@ -2947,6 +2956,17 @@ select:focus {
 
 .source-admin-info {
   min-width: 0;
+}
+
+.admin-thumbnail-attribution {
+  max-width: 340px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.source-edit-preview .source-attribution {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
 }
 
 .source-admin-info h3 {

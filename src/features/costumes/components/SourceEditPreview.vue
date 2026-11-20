@@ -42,8 +42,6 @@ onBeforeUnmount(() => { clearTimeout(debounce); clearTimeout(timeout); });
   <section class="source-edit-preview" aria-label="編集中の資料プレビュー">
     <template v-if="media.kind === 'youtube'">
       <YouTubeEmbed :key="media.embedUrl" :src="media.embedUrl" :title="title || '資料'" />
-      <a v-if="sourceHref" class="source-edit-preview-link" :href="sourceHref" target="_blank"
-        rel="noopener noreferrer">YouTubeを開く ↗</a>
     </template>
     <template v-else-if="media.kind === 'x'">
       <div v-if="postId" class="source-post-preview" tabindex="0" role="region" aria-label="投稿プレビュー（スクロールして全体を確認できます）">
@@ -53,8 +51,6 @@ onBeforeUnmount(() => { clearTimeout(debounce); clearTimeout(timeout); });
         <span class="loading-spinner" aria-hidden="true"></span>
         <span>Xの投稿を読み込んでいます…</span>
       </div>
-      <a v-if="sourceHref" class="source-edit-preview-link" :href="sourceHref" target="_blank"
-        rel="noopener noreferrer">Xを開く ↗</a>
     </template>
     <template v-else>
       <a v-if="image && state !== 'failed'" :href="image" target="_blank" rel="noopener noreferrer">
@@ -65,5 +61,8 @@ onBeforeUnmount(() => { clearTimeout(debounce); clearTimeout(timeout); });
       <p v-else-if="state === 'failed'" class="field-hint" role="status">画像を表示できませんでした。URLや公開状態を確認してください。</p>
       <p v-else-if="state === 'empty'" class="field-hint">画像URLを入力するとプレビューを表示します。</p>
     </template>
+    <slot name="attribution" />
+    <a v-if="sourceHref && media.kind !== 'external'" class="source-edit-preview-link" :href="sourceHref" target="_blank"
+      rel="noopener noreferrer">{{ media.kind === 'youtube' ? 'YouTube' : 'X' }}を開く ↗</a>
   </section>
 </template>

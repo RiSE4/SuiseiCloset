@@ -46,6 +46,23 @@ export type SourceMedia =
   | { kind: 'x'; id: string }
   | { kind: 'external' };
 
+/** 参照元リンクには投稿・動画ではなく、各プラットフォームのアカウントURLだけを許可。 */
+export function sourceAccountUrl(value: string | null | undefined, kind: SourceMedia['kind']): string | null {
+  const safe = safeExternalUrl(value);
+  if (!safe) return null;
+  const url = new URL(safe);
+  if (url.port) return null;
+  if (kind === 'x' && ['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'].includes(url.hostname)) {
+    const handle = url.pathname.match(/^\/([A-Za-z0-9_]{1,15})\/?$/)?.[1];
+    if (handle && !['home', 'search', 'explore', 'intent', 'i', 'settings'].includes(handle.toLowerCase())) return `https://x.com/${handle}`;
+  }
+  if (kind === 'youtube' && ['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(url.hostname)
+    && /^\/(?:@[^/]+|(?:channel|user|c)\/[^/]+)\/?$/.test(url.pathname)) {
+    return `https://www.youtube.com${url.pathname}`;
+  }
+  return null;
+}
+
 /** 時間指定は秒数またはh/m/s表記だけを許可 */
 function startSeconds(value: string | null): number | null {
   if (!value) return null;

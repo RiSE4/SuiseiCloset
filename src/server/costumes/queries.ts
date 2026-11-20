@@ -11,7 +11,7 @@ export const columnList = 'id,name,debut_date,category,description,thumbnail_url
 /** D1列定義：関連資料 */
 export const sourceColumns = 'id,costume_id,title,thumbnail_url,source_url,sort_order,created_at,updated_at';
 
-/** 一覧の出典は、詳細と同じ並び順で先頭の資料を使う。 */
+/** 一覧の参照元は、詳細と同じ並び順で先頭の資料を使う。 */
 const summaryColumns = `${columnList.split(',').map(column => `c.${column}`).join(',')}, s.id AS source_id, s.source_url`;
 const summaryFrom = `costume c LEFT JOIN costume_source s ON s.id = (
   SELECT id FROM costume_source WHERE costume_id = c.id ORDER BY sort_order, id LIMIT 1

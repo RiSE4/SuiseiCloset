@@ -1,7 +1,8 @@
-import { sourceMedia } from '../../features/costumes/media';
+import { sourceAccountUrl, sourceMedia } from '../../features/costumes/media';
 import { fail, json } from '../http';
 import type { Context } from '../types';
 import { decodeHTML } from 'entities';
+import { fetchYoutubeOwner } from './youtube-owner';
 
 export async function extractSourceTitle(bytes: Uint8Array, contentType: string): Promise<string | null> {
   const charset = contentType.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]
@@ -108,14 +109,13 @@ export async function fetchSourceTitle(value: string, blockedHosts: string[] = [
   return title;
 }
 
-/** プラットフォームの公式oEmbedから投稿者名だけを取得。返却HTMLは使わない。 */
-export async function fetchSourceAuthor(value: string): Promise<string | null> {
+/** YouTubeは動画のOwner、Xは公式oEmbedから参照元の名前とURLを取得。 */
+export async function fetchSourceAuthor(value: string): Promise<{ title: string | null; authorUrl: string | null } | null> {
   const media = sourceMedia(value);
   if (media.kind === 'external') return null;
-  const canonical = media.kind === 'youtube' ? `https://www.youtube.com/watch?v=${media.id}`
-    : `https://twitter.com/i/status/${media.id}`;
-  const endpoints = media.kind === 'youtube' ? ['https://www.youtube.com/oembed', 'https://www.youtube.com/oembed']
-    : ['https://publish.x.com/oembed', 'https://publish.twitter.com/oembed'];
+  if (media.kind === 'youtube') return fetchYoutubeOwner(media.id);
+  const canonical = `https://twitter.com/i/status/${media.id}`;
+  const endpoints = ['https://publish.x.com/oembed', 'https://publish.twitter.com/oembed'];
   for (const endpoint of endpoints) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 6000);
@@ -125,10 +125,10 @@ export async function fetchSourceAuthor(value: string): Promise<string | null> {
       if (media.kind === 'x') { url.searchParams.set('omit_script', 'true'); url.searchParams.set('dnt', 'true'); }
       const response = await fetch(url, { redirect: 'manual', signal: controller.signal, headers: {Accept: 'application/json'} });
       if (!response.ok) { await response.body?.cancel(); continue; }
-      const data = await response.json() as {author_name?: unknown};
+      const data = await response.json() as {author_name?: unknown; author_url?: unknown};
       if (typeof data.author_name === 'string') {
         const author = data.author_name.replace(/\s+/g, ' ').trim().slice(0, 300);
-        if (author) return author;
+        if (author) return { title: author, authorUrl: sourceAccountUrl(typeof data.author_url === 'string' ? data.author_url : null, media.kind) };
       }
     } catch { /* 次の公式エンドポイントへフォールバック。 */ }
     finally { clearTimeout(timeout); }
@@ -136,19 +136,19 @@ export async function fetchSourceAuthor(value: string): Promise<string | null> {
   return null;
 }
 
-async function reliableTitle(url: string, blockedHosts: string[]): Promise<string | null> {
-  if (sourceMedia(url).kind !== 'external') return await fetchSourceAuthor(url);
+async function reliableTitle(url: string, blockedHosts: string[]): Promise<{ title: string | null; authorUrl: string | null }> {
+  if (sourceMedia(url).kind !== 'external') return await fetchSourceAuthor(url) ?? { title: null, authorUrl: null };
   for (let attempt = 0; attempt < 3; attempt++) {
     const title = await fetchSourceTitle(url, blockedHosts, attempt);
-    if (title) return title;
+    if (title) return { title, authorUrl: null };
   }
-  return null;
+  return { title: null, authorUrl: null };
 }
-/** 任意URLは受け取らず、公開衣装に登録済みの資料だけを対象にする。 */
-export async function sourceTitle(ctx: Context, costumeId: string, sourceId: number): Promise<Response> {
+/** 登録済みの資料だけを対象にする。非公開衣装は権限確認済みの管理APIからだけ取得可能。 */
+export async function sourceTitle(ctx: Context, costumeId: string, sourceId: number, admin = false): Promise<Response> {
   const source = await ctx.env.DB.prepare(`SELECT s.source_url FROM costume_source s JOIN costume c ON c.id=s.costume_id
-    WHERE s.id=? AND s.costume_id=? AND c.is_published=1`).bind(sourceId, costumeId).first<{ source_url: string }>();
+    WHERE s.id=? AND s.costume_id=? ${admin ? '' : 'AND c.is_published=1'}`).bind(sourceId, costumeId).first<{ source_url: string }>();
   if (!source) return fail('資料が見つかりません', 404);
-  return json({ title: await reliableTitle(source.source_url,
-    [new URL(ctx.request.url).hostname, new URL(ctx.env.APP_ORIGIN).hostname]) });
+  return json(await reliableTitle(source.source_url,
+    [new URL(ctx.request.url).hostname, new URL(ctx.env.APP_ORIGIN).hostname]));
 }

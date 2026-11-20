@@ -29,7 +29,7 @@ const linkLabel = computed(() => media.value.kind === 'youtube' ? 'YouTubeを開
       <p v-else class="source-fallback">{{ failed ? 'この資料の画像を表示できませんでした。' : '元資料へのリンクからご覧ください。' }}</p>
     </div>
     <footer>
-      <SourceAttribution :source="source" :costume-id="costumeId" />
+      <SourceAttribution :source="source" :costume-id="costumeId" link-account />
       <a v-if="href" :href="href" target="_blank" rel="noopener noreferrer">{{ linkLabel }} ↗</a>
       <span v-else>参照先URLが無効です。</span>
     </footer>

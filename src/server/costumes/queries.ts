@@ -4,6 +4,7 @@ import { parseKeywordsJson } from '../../features/costumes/keywords';
 import { fail, json } from '../http';
 import type { Context } from '../types';
 import { paging } from './validation';
+import { attachSourceAttributions } from './source-title';
 
 /** D1列定義：衣装 */
 export const columnList = 'id,name,debut_date,category,description,thumbnail_url,family_key,keywords_json,search_text,is_published,created_at,updated_at';
@@ -101,6 +102,7 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
     return baseSummary;
   });
 
+  await attachSourceAttributions(ctx, items.flatMap(item => item.primarySource ? [item.primarySource] : []));
   return json(
     {
       items,
@@ -156,6 +158,12 @@ export async function detail(ctx: Context, id: string, admin: boolean, status = 
     sources: sourcesResult.results.map(sourceDto),
     relatedCostumes: relatedResults.map(summary),
   };
+
+  await attachSourceAttributions(ctx, [
+    ...baseDto.sources,
+    ...(baseDto.primarySource ? [baseDto.primarySource] : []),
+    ...baseDto.relatedCostumes.flatMap(costume => costume.primarySource ? [costume.primarySource] : []),
+  ]);
 
   //管理用プロペティを追加して返却
   if (admin) {

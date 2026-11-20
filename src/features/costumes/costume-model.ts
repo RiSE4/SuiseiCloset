@@ -8,6 +8,13 @@ export interface CostumeSourceDto {
   thumbnailUrl: string | null;
   sourceUrl: string;
   sortOrder: number;
+  attribution?: SourceAttribution;
+}
+
+/** 一覧・詳細のレスポンスに含める参照元情報。 */
+export interface SourceAttribution {
+  title: string | null;
+  authorUrl: string | null;
 }
 
 /** Creation may succeed even when the subsequent SELECT no longer finds the row. */
@@ -23,7 +30,7 @@ export interface CostumeSummaryDto {
   category: string;
   description: string;
   thumbnailUrl: string | null;
-  primarySource: Pick<CostumeSourceDto, 'id' | 'sourceUrl'> | null;
+  primarySource: Pick<CostumeSourceDto, 'id' | 'sourceUrl' | 'attribution'> | null;
 }
 
 /**

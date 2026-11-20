@@ -201,6 +201,7 @@ async function signOut() {
     </main>
 
     <footer class="site-footer shell">© 2026 Avio.<br>掲載されている資料の著作権は製作者に帰属します。<br>
+      本サイトは非公式のファンメイドです。関係する権利者による公式の提供・承認・後援を示すものではありません。<br>
       <a href="/third-party-licenses.txt" target="_blank" rel="noopener">Third Party Licenses</a>
     </footer>
   </div>

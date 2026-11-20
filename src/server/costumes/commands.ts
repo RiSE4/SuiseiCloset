@@ -53,14 +53,13 @@ function patchSet(fields: Record<string, unknown>, columns: Record<string, strin
   return { assignments: keys.map(key => `${columns[key]} = ?`), values: keys.map(key => fields[key]) };
 }
 
-/** 資料を区分の優先順・現在のカード順で0から連番にする。 */
+/** 衣装内の資料を現在の順序で1から連番にする。 */
 function normalizeSourceOrder(ctx: Context, costumeId: string): D1PreparedStatement {
   return ctx.env.DB.prepare(`
     WITH ranked AS MATERIALIZED (
       SELECT id, ROW_NUMBER() OVER (
-        ORDER BY CASE source_type WHEN 'THREE_VIEW' THEN 0 WHEN 'VIDEO' THEN 1 ELSE 2 END,
-          sort_order, id
-      ) - 1 AS position
+        ORDER BY sort_order, id
+      ) AS position
       FROM costume_source WHERE costume_id = ?
     )
     UPDATE costume_source
@@ -233,13 +232,11 @@ export async function createSource(ctx: Context, user: User, costumeId: string):
 
   const fields = sourceInput(body, true);
   const insertStatement = ctx.env.DB.prepare(`
-    INSERT INTO costume_source(costume_id, source_type, title, thumbnail_url, source_url, sort_order)
-    VALUES(?, ?, ?, ?, ?, COALESCE(?, (
-      SELECT COALESCE(MAX(sort_order), -1) + 1 FROM costume_source
-      WHERE costume_id = ? AND source_type = ?
-    ))) RETURNING id
-  `).bind(costumeId, fields.sourceType, fields.title, fields.thumbnailUrl ?? null, fields.sourceUrl,
-    fields.sortOrder ?? null, costumeId, fields.sourceType);
+    INSERT INTO costume_source(costume_id, title, thumbnail_url, source_url, sort_order)
+    VALUES(?, ?, ?, ?, (
+      SELECT COALESCE(MAX(sort_order), 0) + 1 FROM costume_source WHERE costume_id = ?
+    )) RETURNING id
+  `).bind(costumeId, fields.title, fields.thumbnailUrl ?? null, fields.sourceUrl, costumeId);
 
   const auditStatement = audit(ctx, user, 'source.create');
   const batchResults = await ctx.env.DB.batch([insertStatement, auditStatement, normalizeSourceOrder(ctx, costumeId)]);
@@ -271,8 +268,7 @@ export async function updateSource(ctx: Context, user: User, id: number): Promis
 
   const fields = sourceInput(body, false);
   const patch = patchSet(fields, {
-    sourceType: 'source_type', title: 'title', thumbnailUrl: 'thumbnail_url',
-    sourceUrl: 'source_url', sortOrder: 'sort_order',
+    title: 'title', thumbnailUrl: 'thumbnail_url', sourceUrl: 'source_url',
   });
   patch.assignments.push('updated_at = CURRENT_TIMESTAMP');
   const updateStatement = ctx.env.DB.prepare(
@@ -308,11 +304,11 @@ export async function deleteSource(ctx: Context, user: User, id: number): Promis
   return json({ ok: true });
 }
 
-/** 管理画面のカード順を、区分の優先順で0から保存する。 */
+/** 全件の所属と集合をバッチ内でも確認し、配列順を原子的に保存する。 */
 export async function reorderSources(ctx: Context, user: User, costumeId: string): Promise<Response> {
   const body = await requiredJson(ctx);
   const ids = body.ids;
-  if (!Array.isArray(ids) || ids.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(ids).size !== ids.length) {
+  if (Object.keys(body).some(key => key !== 'ids') || !Array.isArray(ids) || ids.some(id => !Number.isSafeInteger(id) || id < 1) || new Set(ids).size !== ids.length) {
     throw new InputError('資料の順序が不正です');
   }
 
@@ -320,26 +316,39 @@ export async function reorderSources(ctx: Context, user: User, costumeId: string
   if (!costume) return fail('衣装が見つかりません', 404);
 
   const rows = await ctx.env.DB.prepare(
-    'SELECT id, source_type FROM costume_source WHERE costume_id = ?'
-  ).bind(costumeId).all<{ id: number; source_type: string }>();
-  const types = new Map(rows.results.map(row => [row.id, row.source_type]));
-  if (ids.length !== rows.results.length || ids.some(id => !types.has(id))) {
+    'SELECT id FROM costume_source WHERE costume_id = ?'
+  ).bind(costumeId).all<{ id: number }>();
+  const currentIds = new Set(rows.results.map(row => row.id));
+  if (ids.length !== rows.results.length || ids.some(id => !currentIds.has(id))) {
     return fail('資料の一覧が変更されました。再読み込みしてください', 409);
   }
 
-  const orderedIds = ['THREE_VIEW', 'VIDEO', 'OTHER'].flatMap(type => ids.filter(id => types.get(id) === type));
   const statement = ctx.env.DB.prepare(`
     WITH ordered AS MATERIALIZED (
-      SELECT CAST(value AS INTEGER) AS id, CAST(key AS INTEGER) AS position FROM json_each(?)
+      SELECT CAST(value AS INTEGER) AS id, CAST(key AS INTEGER) + 1 AS position FROM json_each(?)
     )
     UPDATE costume_source
     SET sort_order = (SELECT position FROM ordered WHERE ordered.id = costume_source.id),
       updated_at = CURRENT_TIMESTAMP
     WHERE costume_id = ?
-  `).bind(JSON.stringify(orderedIds), costumeId);
-  const auditStatement = ctx.env.DB.prepare(
-    'INSERT INTO audit_log(actor_discord_id, action, target_id) VALUES(?, ?, ?)'
-  ).bind(user.discord_id, 'source.reorder', costumeId);
-  await ctx.env.DB.batch([statement, auditStatement]);
-  return json({ ids: orderedIds });
+  `).bind(JSON.stringify(ids), costumeId);
+  // NOT NULL違反でバッチ全体を取り消す。事前SELECTと更新の間の追加・削除も検出する。
+  const auditStatement = ctx.env.DB.prepare(`
+    INSERT INTO audit_log(actor_discord_id, action, target_id)
+    VALUES(?, 'source.reorder', CASE WHEN
+      EXISTS(SELECT 1 FROM costume WHERE id = ?)
+      AND (SELECT COUNT(*) FROM costume_source WHERE costume_id = ?) = ?
+      AND NOT EXISTS(SELECT 1 FROM json_each(?) AS requested WHERE NOT EXISTS(
+        SELECT 1 FROM costume_source WHERE costume_id = ? AND id = requested.value
+      )) THEN ? ELSE NULL END)
+  `).bind(user.discord_id, costumeId, costumeId, ids.length, JSON.stringify(ids), costumeId, costumeId);
+  try {
+    await ctx.env.DB.batch([auditStatement, statement]);
+  } catch (error) {
+    if (String(error).includes('NOT NULL constraint failed: audit_log.target_id')) {
+      return fail('資料の一覧が変更されました。再読み込みしてください', 409);
+    }
+    throw error;
+  }
+  return json({ ids });
 }

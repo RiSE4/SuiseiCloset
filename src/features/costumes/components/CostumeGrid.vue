@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import Sortable from 'sortablejs';
+import { vPackedGrid } from '../../../shared/packed-grid';
 import type { CostumeSummaryDto } from '../costume-model';
 import CostumeTile from './CostumeTile.vue';
 
-const props = defineProps<{ items: CostumeSummaryDto[]; from?: string; related?: boolean }>();
+const props = defineProps<{ items: CostumeSummaryDto[]; from?: string }>();
 const items = ref([...props.items]);
 const container = ref<HTMLElement>();
 const announcement = ref('');
-const mobileRelated = ref(props.related === true && typeof window !== 'undefined' && window.matchMedia('(max-width: 650px)').matches);
-const columnBreak = computed(() => Math.ceil(items.value.length / 2));
 const sortables: Sortable[] = [];
 type Position = { x: number; y: number };
 let positions = new Map<HTMLElement, Position>();
@@ -67,11 +66,10 @@ function move(from: number, to: number, snapshot = capturePositions()) {
   void nextTick(() => animatePositions(snapshot));
 }
 
-function initSortable(element: HTMLElement, group?: string) {
+function initSortable(element: HTMLElement) {
   sortables.push(Sortable.create(element, {
     draggable: '.costume-tile',
     handle: '.card-drag-handle',
-    ...(group ? { group } : {}),
     // Sortableの単体アニメーションではなく、列をまたぐ全体の動きを補間
     animation: 0,
     delay: 250,
@@ -98,13 +96,8 @@ function initSortable(element: HTMLElement, group?: string) {
       //SortableのDOM変更を戻してから、Vueの配列更新で順序を確定
       const { oldIndex, newIndex, item, from, to } = event;
       if (oldIndex === undefined || newIndex === undefined || (from === to && oldIndex === newIndex)) return;
-      const leftColumn = container.value?.firstElementChild;
-      const fromIndex = mobileRelated.value && from !== leftColumn ? columnBreak.value + oldIndex : oldIndex;
-      const toIndex = mobileRelated.value
-        ? to === leftColumn
-          ? Math.min(newIndex, columnBreak.value - 1)
-          : Math.min(columnBreak.value + newIndex, items.value.length - 1)
-        : newIndex;
+      const fromIndex = oldIndex;
+      const toIndex = newIndex;
       const snapshot = capturePositions();
       item.remove();
       from.insertBefore(item, from.children[oldIndex] ?? null);
@@ -114,58 +107,23 @@ function initSortable(element: HTMLElement, group?: string) {
 }
 
 function initSortables() {
-  if (!container.value) return;
-  if (mobileRelated.value) {
-    for (const column of Array.from(container.value.children)) {
-      initSortable(column as HTMLElement, 'related-costumes');
-    }
-  } else {
-    initSortable(container.value);
-  }
+  if (container.value) initSortable(container.value);
 }
 
 function destroySortables() {
   for (const sortable of sortables.splice(0)) sortable.destroy();
 }
 
-let mediaQuery: MediaQueryList | undefined;
-function onMediaChange(event: MediaQueryListEvent) {
-  mobileRelated.value = props.related === true && event.matches;
-}
-
-onMounted(() => {
-  if (props.related) {
-    mediaQuery = window.matchMedia('(max-width: 650px)');
-    mediaQuery.addEventListener('change', onMediaChange);
-  }
-  initSortables();
-});
-
-watch(mobileRelated, async () => {
-  destroySortables();
-  await nextTick();
-  initSortables();
-});
+onMounted(initSortables);
 
 onBeforeUnmount(() => {
-  mediaQuery?.removeEventListener('change', onMediaChange);
   destroySortables();
   for (const animation of animations.values()) animation.cancel();
 });
 </script>
 
 <template>
-  <div v-if="mobileRelated" ref="container" class="costume-grid">
-    <div class="costume-column">
-      <CostumeTile v-for="(item, index) in items.slice(0, columnBreak)" :key="item.id" :costume="item" :from="from"
-        movable @move="move(index, index + $event)" />
-    </div>
-    <div class="costume-column">
-      <CostumeTile v-for="(item, index) in items.slice(columnBreak)" :key="item.id" :costume="item" :from="from" movable
-        @move="move(columnBreak + index, columnBreak + index + $event)" />
-    </div>
-  </div>
-  <div v-else ref="container" class="costume-grid">
+  <div v-packed-grid ref="container" class="costume-grid packed-grid">
     <CostumeTile v-for="(item, index) in items" :key="item.id" :costume="item" :from="from" movable
       @move="move(index, index + $event)" />
   </div>

@@ -1,302 +1,246 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, TransitionGroup, watch } from 'vue';
 import Sortable from 'sortablejs';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-import { faGrip } from '@fortawesome/free-solid-svg-icons';
-import type { CostumeSourceDto, SourceType } from '../costume-model';
+import { faChevronDown, faChevronUp, faGripVertical } from '@fortawesome/free-solid-svg-icons';
+import type { CostumeSourceDto } from '../costume-model';
 import { validateHttpsUrl } from '../validate-https-url';
+import { safeExternalUrl, sourceMediaLabel, youtubeThumbnailUrl } from '../media';
+import SourceEditForm from './SourceEditForm.vue';
 import { ApiError } from '../../../shared/api/request';
 import { createCostumeSource, deleteCostumeSource, reorderCostumeSources, updateCostumeSource } from '../costume-api';
-import CostumeSourceCard from './CostumeSourceCard.vue';
 
-const props = defineProps<{
-  costumeId: string;
-  sources: CostumeSourceDto[];
-  reload: () => Promise<void>
-}>();
-
-const groups: { type: SourceType; title: string }[] = [
-  { type: 'THREE_VIEW', title: '三面図・設定画' },
-  { type: 'VIDEO', title: '元配信・元動画' },
-  { type: 'OTHER', title: 'その他資料' },
-];
-
-/** 既存の番号を並びの判断に使い、区分の優先順でカードを並べる */
-function sortedSources(sources: CostumeSourceDto[]) {
-  return groups.flatMap(group => sources.filter(source => source.sourceType === group.type)
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
-}
-const orderedSources = ref(sortedSources(props.sources));
-const grouped = computed(() => groups.map(group => ({ ...group, items: orderedSources.value.filter(source => source.sourceType === group.type) })));
-const manager = ref<HTMLElement | null>(null);
-const sortables: Sortable[] = [];
-
-const form = reactive({
-  sourceType: 'THREE_VIEW' as SourceType,
-  title: '',
-  thumbnailUrl: '',
-  sourceUrl: ''
-});
-
-//nullなら新規追加、数値があればその資料の更新として扱う
+const props = defineProps<{ costumeId: string; sources: CostumeSourceDto[]; reload: () => Promise<void>; disabled?: boolean }>();
+const emit = defineEmits<{ 'order-change': [dirty: boolean]; 'draft-change': [dirty: boolean]; 'busy-change': [busy: boolean]; message: [message: { status: string; error: string }] }>();
+const sorted = (sources: CostumeSourceDto[]) => [...sources].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+const orderedSources = ref(sorted(props.sources));
+const savedIds = ref(orderedSources.value.map(source => source.id));
+const orderDirty = computed(() => JSON.stringify(orderedSources.value.map(source => source.id)) !== JSON.stringify(savedIds.value));
+const form = reactive({ title: '', thumbnailUrl: '', sourceUrl: '' });
+const editForm = reactive({ title: '', thumbnailUrl: '', sourceUrl: '' });
+const editBaseline = ref(JSON.stringify(editForm));
+const formBaseline = ref(JSON.stringify(form));
 const editingId = ref<number | null>(null);
-
 const busy = ref(false);
+const locked = computed(() => busy.value || props.disabled);
+const manager = ref<HTMLElement | null>(null);
+let sortable: Sortable | undefined;
+
+watch(locked, value => sortable?.option('disabled', Boolean(value)));
+
+onMounted(() => {
+  if (!manager.value) return;
+
+  sortable = Sortable.create(manager.value, {
+    draggable: '.source-admin-item',
+    handle: '.source-drag-handle',
+    animation: 0,
+    delay: 200,
+    delayOnTouchOnly: true,
+    touchStartThreshold: 5,
+    ghostClass: 'source-drag-placeholder',
+    disabled: Boolean(locked.value),
+    onEnd: ({ oldIndex, newIndex, item, from }) => {
+      if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return;
+      item.remove(); from.insertBefore(item, from.children[oldIndex] ?? null);
+      move(oldIndex, newIndex);
+    }
+  });
+});
+onBeforeUnmount(() => sortable?.destroy());
+
 const error = ref('');
 const status = ref('');
+watch([status, error], () => emit('message', { status: status.value, error: error.value }), { flush: 'sync' });
+
 const announcement = ref('');
+watch(orderDirty, value => emit('order-change', value), { immediate: true });
+watch(() => JSON.stringify(form) !== formBaseline.value || (editingId.value !== null && JSON.stringify(editForm) !== editBaseline.value), value => emit('draft-change', value), { immediate: true });
+watch(busy, value => emit('busy-change', value));
 
-/** カード配置を一括保存し、サーバー側の0始まりの番号を再取得 */
-async function persistOrder(next: CostumeSourceDto[], previous = orderedSources.value) {
-  if (busy.value) return;
-  busy.value = true;
-  error.value = '';
-  orderedSources.value = next;
-
-  try {
-    await reorderCostumeSources(props.costumeId, next.map(source => source.id));
-    orderedSources.value = next.map((source, index) => ({ ...source, sortOrder: index }));
-  } catch (cause) {
-    orderedSources.value = previous;
-    error.value = cause instanceof ApiError && cause.status === 409
-      ? '資料の一覧が変更されました。画面を再読み込みしてください。'
-      : cause instanceof Error ? cause.message : '表示順を保存できませんでした。';
-    busy.value = false;
-    return;
-  }
-  try {
-    await props.reload();
-  } catch {
-    error.value = '表示順は保存されましたが、一覧を再取得できませんでした。画面を再読み込みしてください。';
-  } finally {
-    busy.value = false;
-  }
-}
-
-/** 古い通し番号も、画面に並んだ順に自動で0から保存し直す */
-function normalizeIfNeeded() {
-  if (!busy.value && orderedSources.value.some((source, index) => source.sortOrder !== index)) {
-    void persistOrder([...orderedSources.value]);
-  }
-}
-
-/** ドラッグ後はSortableのDOM操作を戻し、Vueの配列順で表示を確定する */
-function finishDrag(event: Sortable.SortableEvent, type: SourceType) {
-  const { oldIndex, newIndex, item, from } = event;
-
-  if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return;
-  item.remove();
-  from.insertBefore(item, from.children[oldIndex] ?? null);
-
-  const previous = [...orderedSources.value];
-  const items = grouped.value.find(group => group.type === type)?.items ?? [];
-  const moved = items[oldIndex];
-
-  if (!moved) return;
-  const reordered = [...items];
-  reordered.splice(oldIndex, 1);
-  reordered.splice(newIndex, 0, moved);
-
-  const next = groups.flatMap(group => group.type === type ? reordered : grouped.value.find(value => value.type === group.type)?.items ?? []);
-  announcement.value = `${moved.title}を${newIndex + 1}番目に移動しました。`;
-  void persistOrder(next, previous);
-}
-
-/** キーボードでも同じ並び替えを行えるようにする */
-function moveWithKey(event: KeyboardEvent, source: CostumeSourceDto) {
-  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-
-  event.preventDefault();
-  if (busy.value) return;
-
-  const items = grouped.value.find(group => group.type === source.sourceType)?.items ?? [];
-  const from = items.findIndex(item => item.id === source.id);
-  const to = from + (event.key === 'ArrowUp' ? -1 : 1);
-  if (from < 0 || to < 0 || to >= items.length) return;
-
-  const reordered = [...items];
-  reordered.splice(from, 1);
-  reordered.splice(to, 0, source);
-
-  const next = groups.flatMap(group => group.type === source.sourceType ? reordered : grouped.value.find(value => value.type === group.type)?.items ?? []);
-  announcement.value = `${source.title}を${to + 1}番目に移動しました。`;
-  void persistOrder(next, [...orderedSources.value]);
-}
-
-function initSortables() {
-  for (const sortable of sortables.splice(0)) sortable.destroy();
-  for (const grid of Array.from(manager.value?.querySelectorAll<HTMLElement>('.source-admin-grid') ?? [])) {
-    const type = grid.dataset.sourceType as SourceType;
-
-    sortables.push(Sortable.create(grid, {
-      draggable: '.source-admin-item', handle: '.source-drag-handle', animation: 180,
-      delay: 200, delayOnTouchOnly: true, touchStartThreshold: 5,
-      ghostClass: 'source-drag-placeholder', chosenClass: 'source-drag-chosen',
-      disabled: busy.value, onEnd: event => finishDrag(event, type)
-    }));
-  }
-}
-
-watch(() => props.sources, async sources => {
-  orderedSources.value = sortedSources(sources);
-  await nextTick();
-  if (manager.value) initSortables();
-  normalizeIfNeeded();
+watch(() => props.sources, sources => {
+  const refreshed = sorted(sources);
+  if (orderDirty.value) {
+    const byId = new Map(refreshed.map(source => [source.id, source]));
+    const retained = orderedSources.value.flatMap(source => byId.has(source.id) ? [byId.get(source.id)!] : []);
+    const retainedIds = new Set(retained.map(source => source.id));
+    orderedSources.value = [...retained, ...refreshed.filter(source => !retainedIds.has(source.id))];
+  } else orderedSources.value = refreshed;
+  savedIds.value = refreshed.map(source => source.id);
 });
-watch(busy, value => { for (const sortable of sortables) sortable.option('disabled', value); });
-onMounted(() => { initSortables(); normalizeIfNeeded(); });
-onBeforeUnmount(() => { for (const sortable of sortables.splice(0)) sortable.destroy(); });
+function move(from: number, to: number) {
+  if (locked.value || to < 0 || to >= orderedSources.value.length) return;
+  const next = [...orderedSources.value];
+  const [source] = next.splice(from, 1);
 
-/** 入力フォームを新規追加の初期状態へ戻す */
+  if (!source) return;
+  next.splice(to, 0, source); orderedSources.value = next;
+  announcement.value = `${source.title}を${to + 1}番目に移動しました。保存すると確定します。`;
+}
+
 function reset() {
-  editingId.value = null; Object.assign(form, {
-    sourceType: 'THREE_VIEW', title: '',
-    thumbnailUrl: '',
-    sourceUrl: ''
-  }); error.value = '';
+  Object.assign(form, { title: '', thumbnailUrl: '', sourceUrl: '' });
+  formBaseline.value = JSON.stringify(form);
 }
 
-/** 選んだ資料をフォームへコピーし、編集位置までスクロール */
+function clearEdit() {
+  editingId.value = null;
+  Object.assign(editForm, { title: '', thumbnailUrl: '', sourceUrl: '' });
+  editBaseline.value = JSON.stringify(editForm);
+}
+
+function closeEdit() {
+  if (JSON.stringify(editForm) !== editBaseline.value && !window.confirm('編集中の資料の入力を破棄しますか？')) return;
+  clearEdit();
+}
+
 function edit(source: CostumeSourceDto) {
+  if (editingId.value === source.id) { closeEdit(); return; }
+  if (editingId.value !== null && JSON.stringify(editForm) !== editBaseline.value && !window.confirm('編集中の資料の入力を破棄しますか？')) return;
   editingId.value = source.id;
-  Object.assign(form, {
-    sourceType: source.sourceType,
-    title: source.title,
-    thumbnailUrl: source.thumbnailUrl || '',
-    sourceUrl: source.sourceUrl
-  });
-
+  Object.assign(editForm, { title: source.title, thumbnailUrl: source.thumbnailUrl || '', sourceUrl: source.sourceUrl });
+  editBaseline.value = JSON.stringify(editForm);
   error.value = ''; status.value = '';
-  document.getElementById('source-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
-/**
- * タイトルとHTTPS URLを検証し、APIへの送信データを作る
- */
-function payload() {
-  const title = form.title.trim();
+
+function payload(values: typeof form) {
+  const title = values.title.trim();
   if (!title || title.length > 150) throw Error('資料タイトルを150文字以内で入力してください。');
-
-  const sourceUrl = validateHttpsUrl(form.sourceUrl.trim());
-  if (sourceUrl.length > 2048) throw Error('参照先URLが長すぎます。');
-
-  const thumbnailUrl = form.thumbnailUrl.trim() ? validateHttpsUrl(form.thumbnailUrl.trim()) : null;
-  if (thumbnailUrl && thumbnailUrl.length > 2048) throw Error('画像URLが長すぎます。');
-
-  return { sourceType: form.sourceType, title, sourceUrl, thumbnailUrl };
+  const sourceUrl = validateHttpsUrl(values.sourceUrl.trim());
+  const imageUrl = youtubeThumbnailUrl(values.sourceUrl) ?? values.thumbnailUrl;
+  const thumbnailUrl = imageUrl.trim() ? validateHttpsUrl(imageUrl.trim()) : null;
+  if (sourceUrl.length > 2048 || (thumbnailUrl && thumbnailUrl.length > 2048)) throw Error('URLは2048文字以内で入力してください。');
+  return { title, sourceUrl, thumbnailUrl };
 }
-/** 入力を検証して資料を追加または更新し、親が保持する資料一覧を再取得 */
-async function save() {
-  if (busy.value) return;
+
+async function reloadAfter(message: string) {
+  try { await props.reload(); await nextTick(); }
+  catch { error.value = `${message}が、一覧を再取得できませんでした。画面を再読み込みしてください。`; }
+}
+
+async function save(editing = false) {
+  if (locked.value || (editing && editingId.value === null)) return;
   error.value = ''; status.value = '';
   let data: ReturnType<typeof payload>;
-  try {
-    data = payload();
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '資料の入力を確認してください。';
-    return;
-  }
-
+  try { data = payload(editing ? editForm : form); }
+  catch (cause) { error.value = cause instanceof Error ? cause.message : '資料の入力を確認してください。'; return; }
   busy.value = true;
-  const editing = editingId.value !== null;
-
   try {
-    if (editingId.value === null) {
-      await createCostumeSource(props.costumeId, data);
+    if (!editing) {
+      const result = await createCostumeSource(props.costumeId, data);
+      // 再取得に失敗しても保存済み資料を保持し、二重登録を防止
+      const source: CostumeSourceDto = { ...data, id: result.id, sortOrder: savedIds.value.length + 1 };
+      orderedSources.value = [...orderedSources.value, source]; savedIds.value = [...savedIds.value, source.id];
     } else {
-      await updateCostumeSource(editingId.value, data);
+      const source = await updateCostumeSource(editingId.value!, data);
+      orderedSources.value = orderedSources.value.map(item => item.id === source.id ? source : item);
     }
-
-    reset();
-    status.value = editing ? '資料を更新しました。' : '資料を追加しました。';
+    if (editing) clearEdit(); else reset();
+    status.value = '資料を保存しました。';
+    await reloadAfter('資料は保存されました');
   } catch (cause) {
-    error.value = cause instanceof ApiError && cause.status === 404 ? '衣装または資料が見つかりません。画面を再読み込みしてください。' : cause instanceof Error ? cause.message : '資料を保存できませんでした。';
-    busy.value = false;
-    return;
-  }
-
-  // 保存後の一覧取得は別に扱い、保存自体の失敗と区別して利用者へ知らせる
-  try {
-    await props.reload();
-  } catch {
-    error.value = '資料は保存されましたが、一覧を再取得できませんでした。画面を再読み込みしてください。';
+    error.value = cause instanceof Error ? cause.message : '資料を保存できませんでした。';
   } finally {
     busy.value = false;
   }
 }
-
-/** 確認後に資料を削除し、一覧を再取得する。処理中の二重操作は受け付けない */
 async function remove(source: CostumeSourceDto) {
-  if (busy.value || !window.confirm(`「${source.title}」を削除しますか？`)) return;
+  if (locked.value || !window.confirm(`「${source.title}」を削除しますか？`)) return;
   busy.value = true; error.value = ''; status.value = '';
+  try {
+    await deleteCostumeSource(source.id);
+    orderedSources.value = orderedSources.value.filter(item => item.id !== source.id);
+    savedIds.value = savedIds.value.filter(id => id !== source.id);
+    if (editingId.value === source.id) clearEdit();
+    status.value = '資料を削除しました。'; await reloadAfter('資料は削除されました');
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '資料を削除できませんでした。';
+  }
+  finally { busy.value = false; }
+}
+/** 親の保存バーからだけ呼ぶ。失敗時は並び順を保持して再試行。 */
+async function saveOrder(): Promise<boolean> {
+  if (!orderDirty.value) return true;
+  if (busy.value) return false;
+  busy.value = true; error.value = ''; status.value = '';
+  const ids = orderedSources.value.map(source => source.id);
 
   try {
-    await deleteCostumeSource(source.id); status.value = `「${source.title}」を削除しました。`;
-  }
-  catch (cause) {
-    error.value = cause instanceof Error ? cause.message : '資料を削除できませんでした。'; busy.value = false;
-    return;
-  }
+    await reorderCostumeSources(props.costumeId, ids);
+    savedIds.value = ids;
+    orderedSources.value = orderedSources.value.map((source, index) => ({ ...source, sortOrder: index + 1 }));
 
-  try {
-    await props.reload();
-  } catch {
-    error.value = '資料は削除されましたが、一覧を再取得できませんでした。画面を再読み込みしてください。';
+    await nextTick(); status.value = '表示順を保存しました。';
+    await reloadAfter('表示順は保存されました');
+    return true;
+  } catch (cause) {
+    error.value = cause instanceof ApiError && cause.status === 409
+      ? '資料の一覧が変更されました。入力と並び順は保持しています。再読み込みして確認してください。'
+      : cause instanceof Error ? cause.message : '表示順を保存できませんでした。';
+    return false;
   } finally {
     busy.value = false;
   }
 }
-</script>
 
+defineExpose({ saveOrder });
+</script>
 <template>
-  <section ref="manager" class="admin-section source-manager" aria-labelledby="sources-title">
+  <section class="admin-section source-manager" aria-labelledby="sources-title">
     <div class="admin-section-heading">
       <div>
         <p class="eyebrow">SOURCES</p>
-        <h2 id="sources-title">外部資料</h2>
-      </div><span>{{ sources.length }}件</span>
+        <h2 id="sources-title">関連資料</h2>
+      </div><span>{{ orderedSources.length }}件</span>
     </div>
-    <p class="field-hint">衣装の基本情報とは別に保存されます。画像URLは表示用、参照先URLは開く先です。カードの持ち手をドラッグすると並び順が保存されます。</p>
+    <p class="field-hint">資料の追加・編集・削除は個別に保存されます。表示順はドラッグ・上下ボタンで変更し、画面下の「保存」で確定します。番号は保存後に更新されます。</p>
     <p class="reorder-announcement" role="status" aria-live="polite">{{ announcement }}</p>
-    <p v-if="status" class="message success" role="status">{{ status }}</p>
-    <p v-if="error" class="message error" role="alert">{{ error }}</p>
-    <p v-if="orderedSources.length === 0" class="empty-note">資料が登録されていません。下のフォームから追加できます。</p>
-
-    <div v-for="group in grouped" :key="group.type" class="source-admin-group">
-      <h3>{{ group.title }} <small>{{ group.items.length }}件</small></h3>
-      <div v-if="group.items.length" class="source-admin-grid" :data-source-type="group.type">
-        <div v-for="source in group.items" :key="source.id" class="source-admin-item">
-          <CostumeSourceCard :source="source" />
-          <p class="source-url">{{ source.sourceUrl }}</p>
-          <div class="row-actions"><button type="button" class="button secondary" :disabled="busy"
-              @click="edit(source)">編集</button><button type="button" class="button danger-outline" :disabled="busy"
-              @click="remove(source)">削除</button></div>
-          <button type="button" class="card-drag-handle source-drag-handle" :disabled="busy"
-            :aria-label="`${source.title}を並べ替え。矢印キーでも移動できます`" title="押したままドラッグして移動" @contextmenu.prevent
-            @keydown="moveWithKey($event, source)">
-            <FontAwesomeIcon :icon="faGrip" aria-hidden="true" />
+    <p v-if="orderDirty" class="field-hint">表示順に未保存の変更があります。</p>
+    <p v-if="!orderedSources.length" class="empty-note">資料が登録されていません。</p>
+    <div ref="manager" class="source-admin-grid">
+      <TransitionGroup name="source-reorder">
+        <article v-for="(source, index) in orderedSources" :key="source.id" class="source-admin-item"
+          :class="{ 'is-editing': editingId === source.id }">
+          <button type="button" class="source-drag-handle" :disabled="locked" :aria-label="`${source.title}をドラッグして並べ替え`"
+            title="ドラッグして移動" @contextmenu.prevent>
+            <FontAwesomeIcon :icon="faGripVertical" aria-hidden="true" />
           </button>
-        </div>
-      </div>
-    </div>
+          <span class="source-position" :aria-label="`保存済み表示順 ${source.sortOrder}`">{{
+            String(source.sortOrder).padStart(2, '0') }}</span>
+          <div class="source-admin-info">
+            <h3>{{ source.title }}</h3>
+            <a v-if="safeExternalUrl(source.sourceUrl)" class="source-platform"
+              :href="safeExternalUrl(source.sourceUrl)!" target="_blank" rel="noopener noreferrer"
+              :title="source.sourceUrl" :aria-label="`${source.title}の参照先を開く: ${source.sourceUrl}`">{{
+                sourceMediaLabel(source.sourceUrl) }}<span aria-hidden="true"> ↗</span></a>
+            <span v-else class="source-platform">{{ sourceMediaLabel(source.sourceUrl) }}</span>
+          </div>
+          <div class="source-row-actions">
+            <div class="source-move-actions">
+              <button type="button" class="source-move-button" :disabled="locked || index === 0"
+                :aria-label="`${source.title}を上へ移動`" title="上へ移動" @click="move(index, index - 1)">
+                <FontAwesomeIcon :icon="faChevronUp" aria-hidden="true" />
+              </button>
+              <button type="button" class="source-move-button" :disabled="locked || index === orderedSources.length - 1"
+                :aria-label="`${source.title}を下へ移動`" title="下へ移動" @click="move(index, index + 1)">
+                <FontAwesomeIcon :icon="faChevronDown" aria-hidden="true" />
+              </button>
+            </div>
+            <div class="source-edit-actions">
+              <button type="button" class="button secondary" :disabled="locked" :aria-label="`${source.title}を編集`"
+                :aria-expanded="editingId === source.id" :aria-controls="`source-edit-${source.id}`"
+                @click="edit(source)">{{ editingId === source.id ? '閉じる' : '編集' }}</button>
+              <button type="button" class="button danger-outline" :disabled="locked" :aria-label="`${source.title}を削除`"
+                @click="remove(source)">削除</button>
+            </div>
+          </div>
+          <SourceEditForm v-if="editingId === source.id" :id="`source-edit-${source.id}`" class="source-inline-editor"
+            :form="editForm" :disabled="locked" :busy="busy" editing @save="save(true)" @cancel="closeEdit" />
 
-    <form id="source-form" class="source-form" @submit.prevent="save">
-      <h3>{{ editingId === null ? '資料を追加' : '資料を編集' }}</h3>
-      <div class="admin-form-grid">
-        <label class="form-field"><span>資料区分 <b>必須</b></span><select v-model="form.sourceType" :disabled="busy">
-            <option value="THREE_VIEW">三面図・設定画</option>
-            <option value="VIDEO">元配信・元動画</option>
-            <option value="OTHER">その他資料</option>
-          </select></label>
-        <label class="form-field"><span>資料タイトル <b>必須</b></span><input v-model="form.title" maxlength="150" required
-            :disabled="busy" placeholder="例: 衣装設定画"></label>
-        <label class="form-field wide"><span>参照先URL <b>必須</b></span><input v-model="form.sourceUrl" type="url"
-            maxlength="2048" required pattern="https://.*" :disabled="busy" placeholder="https://..."></label>
-        <label class="form-field wide"><span>画像URL（任意）</span><input v-model="form.thumbnailUrl" type="url"
-            maxlength="2048" pattern="https://.*" :disabled="busy" placeholder="https://..."></label>
-      </div>
-      <div class="row-actions"><button type="submit" class="button primary" :disabled="busy">{{ busy ? '保存中…' :
-        editingId === null ? '資料を追加' : '資料の変更を保存' }}</button><button v-if="editingId !== null" type="button"
-          class="button secondary" :disabled="busy" @click="reset">編集をやめる</button></div>
-    </form>
+        </article>
+      </TransitionGroup>
+    </div>
+    <SourceEditForm id="source-form" class="source-form" :form="form" :disabled="locked" :busy="busy" @save="save()"
+      @cancel="reset" />
   </section>
 </template>

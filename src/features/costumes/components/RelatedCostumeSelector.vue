@@ -63,7 +63,7 @@ onBeforeUnmount(stopSearch);
       <div><strong>{{ selected.name }}</strong><small>{{ selected.category || 'カテゴリ未設定' }}</small></div><button
         type="button" class="button secondary" :disabled="disabled" @click="emit('select', null)">関連を解除</button>
     </div>
-    <p v-else class="field-hint">関連衣装は未選択です。</p>
+    <p v-else class="field-hint">関連衣装が選択されていません。</p>
     <label class="form-field"><span>既存衣装を検索して選択</span><input v-model="query" type="search" maxlength="150"
         :disabled="disabled" placeholder="衣装名を入力" @input="onInput" @focus="search"></label>
     <p v-if="loading" class="field-hint" role="status">候補を検索中…</p>

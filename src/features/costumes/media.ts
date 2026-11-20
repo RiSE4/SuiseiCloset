@@ -1,5 +1,3 @@
-import type { CostumeSourceDto } from './costume-model';
-
 /**
  * 認証情報を含まないHTTPS URLを表示用に整形して返す（未指定・不正なURLはnull）
  * @param value 検証するURL
@@ -43,22 +41,52 @@ export function youtubeVideoId(value: string | null | undefined): string | null 
   return id && /^[\w-]{11}$/.test(id) ? id : null;
 }
 
-/**
- * 指定された画像URLを優先し、画像が使えないVIDEO資料ではYouTubeの画像を補完
- * @param source CostumeSourceDto
- * @returns 画像URLまたはnull
- */
-export function sourceThumbnail(source: CostumeSourceDto): string | null {
-  const explicit = safeExternalUrl(source.thumbnailUrl);
+export type SourceMedia =
+  | { kind: 'youtube'; id: string; embedUrl: string }
+  | { kind: 'x'; id: string }
+  | { kind: 'external' };
 
-  if (explicit) {
+/** 時間指定は秒数またはh/m/s表記だけを許可 */
+function startSeconds(value: string | null): number | null {
+  if (!value) return null;
+  const match = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(value);
+  const seconds = /^\d+$/.test(value) ? Number(value)
+    : match ? Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0) : NaN;
+  return Number.isSafeInteger(seconds) && seconds >= 0 && seconds <= 2147483647 ? seconds : null;
+}
 
-    return explicit;
+/** HTTPS・正規ホスト・ID形式から表示方式を導出 */
+export function sourceMedia(value: string | null | undefined): SourceMedia {
+  const safe = safeExternalUrl(value);
+  if (!safe) return { kind: 'external' };
+
+  const url = new URL(safe);
+  if (url.port) return { kind: 'external' };
+
+  const videoId = youtubeVideoId(safe);
+  if (videoId) {
+    const embed = new URL(`https://www.youtube.com/embed/${videoId}`);
+    embed.searchParams.set('autoplay', '0');
+
+    const start = startSeconds(url.searchParams.get('start')) ?? startSeconds(url.searchParams.get('t'));
+    if (start !== null) embed.searchParams.set('start', String(start));
+
+    return { kind: 'youtube', id: videoId, embedUrl: embed.href };
   }
-  if (source.sourceType !== 'VIDEO') {
-    return null;
+  if (['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'].includes(url.hostname)) {
+    const id = url.pathname.match(/^\/(?:[A-Za-z0-9_]{1,15}\/status|i\/web\/status)\/([1-9]\d{0,19})(?:\/(?:photo|video)\/[1-9]\d*)?\/?$/)?.[1];
+    if (id) return { kind: 'x', id };
   }
-  const id = youtubeVideoId(source.sourceUrl);
+  return { kind: 'external' };
+}
 
-  return id ? `https://i.ytimg.com/vi/${id}/hq720.jpg` : null;
+export const sourceMediaLabel = (value: string) => {
+  const media = sourceMedia(value);
+  return media.kind === 'youtube' ? 'YouTube' : media.kind === 'x' ? 'X' : '関連資料';
+};
+
+/** 正規の動画URLだけから公式サムネイルの参照先を組み立て */
+export function youtubeThumbnailUrl(value: string): string | null {
+  const media = sourceMedia(value);
+  return media.kind === 'youtube' ? `https://i.ytimg.com/vi/${media.id}/hq720.jpg` : null;
 }

@@ -36,7 +36,12 @@ const sources = ref<CostumeSourceDto[]>([]);
 /** 読み込みまたは保存が完了した時点のフォームを、未保存判定の比較元にする  */
 const baseline = ref(JSON.stringify(form));
 /** 基本情報の差分、または関連先の操作があれば未保存と判定する  */
-const dirty = computed(() => JSON.stringify(form) !== baseline.value || relatedTouched.value);
+const basicDirty = computed(() => JSON.stringify(form) !== baseline.value || relatedTouched.value);
+const sourceOrderDirty = ref(false);
+const sourceDraftDirty = ref(false);
+const sourceBusy = ref(false);
+const sourceEditor = ref<InstanceType<typeof CostumeSourceEditor> | null>(null);
+const dirty = computed(() => basicDirty.value || sourceOrderDirty.value);
 const previewUrl = computed(() => safeExternalUrl(form.thumbnailUrl));
 const imageFailed = ref(false);
 const imageLoaded = ref(false);
@@ -47,6 +52,10 @@ const missing = ref(false);
 const loadError = ref('');
 const saveError = ref('');
 const status = ref('');
+function setSourceMessage(message: { status: string; error: string }) {
+  saveError.value = message.error;
+  status.value = message.error ? '' : message.status;
+}
 const invalidField = ref('');
 const retry = ref(0);
 let controller: AbortController | undefined;
@@ -207,7 +216,7 @@ function payload(): CostumeCreateRequest {
  * 新規登録後は採番された衣装の編集画面へ移動し、資料の追加を可能にする
  */
 async function save() {
-  if (busy.value || deleting.value) return;
+  if (busy.value || deleting.value || sourceBusy.value) return;
   saveError.value = ''; status.value = '';
   let data: CostumeCreateRequest;
 
@@ -223,10 +232,23 @@ async function save() {
     return;
   }
   busy.value = true;
+  let orderSaved = false;
 
   try {
+    const hadOrderChanges = sourceOrderDirty.value;
+    if (sourceEditor.value && !await sourceEditor.value.saveOrder()) {
+      if (!saveError.value) saveError.value = '表示順を保存できませんでした。再試行してください。';
+      return;
+    }
+    orderSaved = hadOrderChanges;
+    if (!isNew.value && !basicDirty.value) {
+      status.value = '表示順を保存しました。';
+      return;
+    }
+    const sourceWarning = saveError.value;
     const detail = isNew.value ? await createCostume(data) : await updateCostume(id.value, data);
     fill(detail);
+    if (sourceWarning) saveError.value = sourceWarning;
     status.value = isNew.value ? '衣装を登録しました。資料を追加できます。' : '衣装を保存しました。';
 
     if (isNew.value) {
@@ -249,6 +271,7 @@ async function save() {
       saveError.value = '衣装または関連先が見つかりません。一覧を確認してください。';
     else
       saveError.value = cause instanceof Error ? cause.message : '保存できませんでした。';
+    if (orderSaved) saveError.value = `表示順は保存済みです。基本情報の保存に失敗しました。${saveError.value}`;
   } finally {
     busy.value = false;
   }
@@ -261,7 +284,7 @@ async function reloadSources() {
 }
 /** 衣装情報と紐づく資料の削除 */
 async function remove() {
-  if (busy.value || deleting.value || !window.confirm(`「${form.name}」を削除しますか？紐づく資料もすべて削除されます。`)) return;
+  if (busy.value || deleting.value || sourceBusy.value || !window.confirm(`「${form.name}」を削除しますか？紐づく資料もすべて削除されます。`)) return;
   deleting.value = true; saveError.value = ''; status.value = '';
 
   try {
@@ -281,7 +304,7 @@ async function remove() {
 
 /** 未保存の変更がある場合に、タブを閉じる操作や再読み込みでブラウザーの確認を求める */
 function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value) {
+  if (dirty.value || sourceDraftDirty.value) {
     event.preventDefault(); event.returnValue = '';
   }
 }
@@ -293,7 +316,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('beforeunload', beforeUnload);
 });
 
-onBeforeRouteLeave(() => !dirty.value || window.confirm('保存していない変更があります。画面を離れますか？'));
+onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.confirm('保存していない変更があります。画面を離れますか？'));
 </script>
 
 <template>
@@ -325,7 +348,7 @@ onBeforeRouteLeave(() => !dirty.value || window.confirm('保存していない�
         </div><span :class="['status-badge', isPublished ? 'published' : 'draft']">{{ isPublished ? '公開中' : '非公開'
         }}</span>
       </div>
-      <p v-if="status && !dirty" class="message success" role="status">{{ status }}</p>
+      <p v-if="status && !saveError" class="message success" role="status">{{ status }}</p>
       <p v-if="saveError" id="admin-form-error" class="message error" role="alert">{{ saveError }}</p>
 
       <form novalidate @submit.prevent="save">
@@ -379,7 +402,7 @@ onBeforeRouteLeave(() => !dirty.value || window.confirm('保存していない�
               <h2 id="keywords-title">キーワード</h2>
             </div>
           </div>
-          <p class="field-hint">小物や細かい差分など、検索で見つけたい言葉を追加します。</p>
+          <p class="field-hint">衣装の差分や特徴など、検索で見つけたい言葉を追加します。</p>
           <KeywordInput v-model="form.keywords" :disabled="busy || deleting" />
         </section>
 
@@ -394,7 +417,6 @@ onBeforeRouteLeave(() => !dirty.value || window.confirm('保存していない�
             item.name).join('、')}}</p>
           <RelatedCostumeSelector :selected="related" :current-id="isNew ? undefined : id" :disabled="busy || deleting"
             @select="selectRelated" />
-          <p class="field-hint">異なる既存グループ同士は統合できません。</p>
         </section>
 
         <div class="admin-save-bar">
@@ -404,24 +426,27 @@ onBeforeRouteLeave(() => !dirty.value || window.confirm('保存していない�
                 :class="{ unsaved: !isNew && dirty }">{{ isNew ? '未登録' : dirty ? '未保存' : '保存済み' }}</span>
             </Transition>
           </span>
-          <button type="submit" class="button primary" :disabled="busy || deleting || (!isNew && !dirty)">{{ busy ?
-            '保存中…' : isNew ? '衣装を登録' : '変更を保存' }}</button>
-          <button type="button" class="button admin-back-button" :disabled="busy || deleting"
+          <button type="submit" class="button primary"
+            :disabled="busy || deleting || sourceBusy || (!isNew && !dirty)">{{ busy ?
+              '保存中…' : isNew ? '衣装を登録' : '変更を保存' }}</button>
+          <button type="button" class="button admin-back-button" :disabled="busy || deleting || sourceBusy"
             @click="router.push(returnTo)">一覧に戻る</button>
         </div>
       </form>
 
-      <CostumeSourceEditor v-if="!isNew" :costume-id="id" :sources="sources" :reload="reloadSources" />
+      <CostumeSourceEditor v-if="!isNew" ref="sourceEditor" :costume-id="id" :sources="sources" :reload="reloadSources"
+        @message="setSourceMessage" :disabled="busy || deleting" @order-change="sourceOrderDirty = $event"
+        @draft-change="sourceDraftDirty = $event" @busy-change="sourceBusy = $event" />
 
       <section v-else class="admin-section">
-        <h2>外部資料</h2>
+        <h2>関連資料</h2>
         <p>衣装を登録した後、この画面で三面図・動画・その他資料を追加できます。</p>
       </section>
 
       <section v-if="!isNew" class="admin-section danger-zone">
         <h2>衣装を削除</h2>
-        <p>衣装と紐づく資料が削除されます。この操作は元に戻せません。</p><button type="button" class="button danger" :disabled="busy || deleting"
-          @click="remove">{{ deleting ? '削除中…' : 'この衣装を削除' }}</button>
+        <p>衣装と紐づく資料が削除されます。この操作は元に戻せません。</p><button type="button" class="button danger"
+          :disabled="busy || deleting || sourceBusy" @click="remove">{{ deleting ? '削除中…' : 'この衣装を削除' }}</button>
       </section>
     </template>
   </section>

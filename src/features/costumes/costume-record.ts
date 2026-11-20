@@ -1,4 +1,3 @@
-import type { SourceType } from './costume-model';
 
 /**
  * 衣装データ
@@ -28,7 +27,6 @@ export interface Costume {
 export interface CostumeSource {
   id: number;
   costume_id: string;
-  source_type: SourceType;
   title: string;
   thumbnail_url: string | null;
   source_url: string;

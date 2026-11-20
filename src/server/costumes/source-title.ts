@@ -3,6 +3,7 @@ import { fail, json } from '../http';
 import type { Context } from '../types';
 import { decodeHTML } from 'entities';
 import { fetchYoutubeOwner } from './youtube-owner';
+import type { SourceAttribution } from '../../features/costumes/costume-model';
 
 export async function extractSourceTitle(bytes: Uint8Array, contentType: string): Promise<string | null> {
   const charset = contentType.match(/charset\s*=\s*["']?([\w-]+)/i)?.[1]
@@ -46,12 +47,12 @@ export function publicAddress(address: string): boolean {
     !(a === 198 && (b === 18 || b === 19 || b === 51)) && !(a === 203 && b === 0);
 }
 
-async function publicHost(host: string, signal: AbortSignal, resolver = 'cloudflare-dns.com'): Promise<boolean> {
+async function publicHost(host: string, signal: AbortSignal, resolver = 'cloudflare-dns.com', fetcher: typeof fetch = fetch): Promise<boolean> {
   const responses = await Promise.all(['A', 'AAAA'].map(async type => {
     const url = new URL(resolver === 'dns.google' ? 'https://dns.google/resolve' : 'https://cloudflare-dns.com/dns-query');
     url.searchParams.set('name', host); url.searchParams.set('type', type);
     // Workersはredirect:errorに未対応。manualにして非2xxを明示的に拒否する。
-    const response = await fetch(url, { headers: { Accept: 'application/dns-json' }, signal, redirect: 'manual' });
+    const response = await fetcher(url, { headers: { Accept: 'application/dns-json' }, signal, redirect: 'manual' });
     if (!response.ok) throw Error('DNS lookup failed');
     return await response.json() as { Status?: number; Answer?: { type: number; data: string }[] };
   }));
@@ -60,7 +61,7 @@ async function publicHost(host: string, signal: AbortSignal, resolver = 'cloudfl
   return addresses.length > 0 && addresses.every(answer => publicAddress(answer.data));
 }
 
-export async function fetchSourceTitle(value: string, blockedHosts: string[] = [], attempt = 0): Promise<string | null> {
+export async function fetchSourceTitle(value: string, blockedHosts: string[] = [], attempt = 0, fetcher: typeof fetch = fetch): Promise<string | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 6000);
   let title: string | null = null;
@@ -68,8 +69,8 @@ export async function fetchSourceTitle(value: string, blockedHosts: string[] = [
     let url = titleUrl(value);
     for (let redirects = 0; url && redirects <= 3; redirects++) {
       if (blockedHosts.includes(url.hostname)) break;
-      if (!await publicHost(url.hostname, controller.signal, attempt === 1 ? 'dns.google' : 'cloudflare-dns.com')) break;
-      const response = await fetch(url.href, {
+      if (!await publicHost(url.hostname, controller.signal, attempt === 1 ? 'dns.google' : 'cloudflare-dns.com', fetcher)) break;
+      const response = await fetcher(url.href, {
         redirect: 'manual', signal: controller.signal,
         headers: { Accept: 'text/html,application/xhtml+xml',
           'User-Agent': attempt ? 'Mozilla/5.0 (compatible; SuiseiCloset/1.0)' : 'SuiseiCloset-SourceTitle/1.0',
@@ -109,11 +110,11 @@ export async function fetchSourceTitle(value: string, blockedHosts: string[] = [
   return title;
 }
 
-/** YouTubeは動画のOwner、Xは公式oEmbedから参照元の名前とURLを取得。 */
-export async function fetchSourceAuthor(value: string): Promise<{ title: string | null; authorUrl: string | null } | null> {
+/** YouTube・Xともに公式oEmbedから参照元の名前とURLを取得。 */
+export async function fetchSourceAuthor(value: string, fetcher: typeof fetch = fetch): Promise<{ title: string | null; authorUrl: string | null } | null> {
   const media = sourceMedia(value);
   if (media.kind === 'external') return null;
-  if (media.kind === 'youtube') return fetchYoutubeOwner(media.id);
+  if (media.kind === 'youtube') return fetchYoutubeOwner(media.id, fetcher);
   const canonical = `https://twitter.com/i/status/${media.id}`;
   const endpoints = ['https://publish.x.com/oembed', 'https://publish.twitter.com/oembed'];
   for (const endpoint of endpoints) {
@@ -123,7 +124,7 @@ export async function fetchSourceAuthor(value: string): Promise<{ title: string 
       const url = new URL(endpoint);
       url.searchParams.set('url', canonical); url.searchParams.set('format', 'json');
       if (media.kind === 'x') { url.searchParams.set('omit_script', 'true'); url.searchParams.set('dnt', 'true'); }
-      const response = await fetch(url, { redirect: 'manual', signal: controller.signal, headers: {Accept: 'application/json'} });
+      const response = await fetcher(url, { redirect: 'manual', signal: controller.signal, headers: {Accept: 'application/json'} });
       if (!response.ok) { await response.body?.cancel(); continue; }
       const data = await response.json() as {author_name?: unknown; author_url?: unknown};
       if (typeof data.author_name === 'string') {
@@ -136,13 +137,50 @@ export async function fetchSourceAuthor(value: string): Promise<{ title: string 
   return null;
 }
 
-async function reliableTitle(url: string, blockedHosts: string[]): Promise<{ title: string | null; authorUrl: string | null }> {
-  if (sourceMedia(url).kind !== 'external') return await fetchSourceAuthor(url) ?? { title: null, authorUrl: null };
+async function reliableTitle(url: string, blockedHosts: string[], fetcher: typeof fetch = fetch): Promise<SourceAttribution> {
+  if (sourceMedia(url).kind !== 'external') return await fetchSourceAuthor(url, fetcher) ?? { title: null, authorUrl: null };
   for (let attempt = 0; attempt < 3; attempt++) {
-    const title = await fetchSourceTitle(url, blockedHosts, attempt);
+    const title = await fetchSourceTitle(url, blockedHosts, attempt, fetcher);
     if (title) return { title, authorUrl: null };
   }
   return { title: null, authorUrl: null };
+}
+
+/** DBで閲覧権限を確認済みの資料へ、同じレスポンス内で参照元情報を付加する。 */
+export async function attachSourceAttributions(ctx: Context, sources: { sourceUrl: string; attribution?: SourceAttribution }[]): Promise<void> {
+  const blockedHosts = [new URL(ctx.request.url).hostname, new URL(ctx.env.APP_ORIGIN).hostname];
+  const groups = new Map<string, typeof sources>();
+  for (const source of sources) {
+    const media = sourceMedia(source.sourceUrl);
+    const key = media.kind === 'external' ? source.sourceUrl : `${media.kind}:${media.id}`;
+    const group = groups.get(key);
+    if (group) group.push(source);
+    else groups.set(key, [source]);
+  }
+  const queue = [...groups.values()];
+  if (!queue.length) return;
+  const controller = new AbortController();
+  // 一覧取得を外部サイトの遅延に引きずらせない。無料枠の50外部通信にも余裕を残す。
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  let requests = 0;
+  const fetcher: typeof fetch = (input, init) => {
+    if (controller.signal.aborted || requests >= 48) return Promise.reject(new Error('Metadata fetch budget exceeded'));
+    requests++;
+    return fetch(input, { ...init, signal: controller.signal });
+  };
+  try {
+    // 一般サイトのDNS照会は2接続を使うため、混在時は資料を同時に2件まで処理する。
+    const concurrency = queue.some(group => sourceMedia(group[0].sourceUrl).kind === 'external') ? 2 : 6;
+    await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+      let group: typeof sources | undefined;
+      while ((group = queue.shift())) {
+        let result: SourceAttribution = { title: null, authorUrl: null };
+        try { result = await reliableTitle(group[0].sourceUrl, blockedHosts, fetcher); }
+        catch { /* 参照元取得の失敗で衣装API全体を失敗させない。 */ }
+        for (const source of group) source.attribution = result;
+      }
+    }));
+  } finally { clearTimeout(timeout); }
 }
 /** 登録済みの資料だけを対象にする。非公開衣装は権限確認済みの管理APIからだけ取得可能。 */
 export async function sourceTitle(ctx: Context, costumeId: string, sourceId: number, admin = false): Promise<Response> {

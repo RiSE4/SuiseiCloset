@@ -3102,3 +3102,5 @@ a.source-platform:hover {
 @media (max-width: 650px) {
   .costume-grid.packed-grid, .related-grid .costume-grid.packed-grid { --packed-columns: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.admin-palette-preview { max-width: 340px; margin-top: 8px; overflow-wrap: anywhere; }

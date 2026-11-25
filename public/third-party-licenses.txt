@@ -1542,3 +1542,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+
+================================================================================
+
+ColorPicker color modules (src/lib/color)
+Source: https://github.com/RiSE4/ColorPicker/tree/780c06bc31035637e994fa56f63f1b34c6422714/src/lib/color
+Files copied unchanged; see src/lib/color/UPSTREAM.md.
+No upstream LICENSE or package license declaration was present at this commit.
+SuiseiCloset's MIT license does not relicense these files. Upstream permission must be confirmed before distribution.
+

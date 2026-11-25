@@ -4,7 +4,7 @@ import { onBeforeRouteLeave, RouterLink, useRoute, useRouter } from 'vue-router'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { faWrench } from '@fortawesome/free-solid-svg-icons';
 import { ApiError } from '../../../shared/api/request';
-import { createCostume, deleteCostume, getAdminCostumeDetail, updateCostume } from '../costume-api';
+import { saveCostumePalette, createCostume, deleteCostume, getAdminCostumeDetail, updateCostume } from '../costume-api';
 import { refreshAuth } from '../../auth/auth';
 import type { AdminCostumeDto, CostumeCreateRequest, CostumeSourceDto, CostumeSummaryDto } from '../costume-model';
 import { validateKeywords } from '../keywords';
@@ -16,6 +16,36 @@ import KeywordInput from '../components/KeywordInput.vue';
 import RelatedCostumeSelector from '../components/RelatedCostumeSelector.vue';
 import CostumeSourceEditor from '../components/CostumeSourceEditor.vue';
 import SourceAttribution from '../components/SourceAttribution.vue';
+
+import ColorPaletteBar from '../components/ColorPaletteBar.vue';
+import { analyzeThumbnail } from '../analyze-thumbnail';
+import type { ColorPalette } from '../color-palette';
+
+const savedCostume = ref<AdminCostumeDto | null>(null);
+const palette = ref<ColorPalette | null>(null);
+const paletteMessage = ref('');
+const shownPalette = computed(() => form.thumbnailUrl.trim() === savedCostume.value?.thumbnailUrl ? palette.value : null);
+
+async function generatePalette(detail: AdminCostumeDto) {
+  if (!detail.thumbnailUrl) return;
+  const started = performance.now();
+  paletteMessage.value = 'カラーパレットを解析しています…';
+  try {
+    const colors = await analyzeThumbnail(detail.thumbnailUrl);
+    const result = await saveCostumePalette(detail, colors);
+    if (savedCostume.value?.id === detail.id && savedCostume.value.paletteRevision === detail.paletteRevision) {
+      palette.value = result.colorPalette;
+      paletteMessage.value = 'パレットを保存しました（解析・保存 ' + Math.round(performance.now() - started) + 'ms）。';
+    }
+  } catch {
+    paletteMessage.value = '衣装は保存済みです。パレットを生成・保存できませんでした。画像のCORS設定・形式・サイズを確認して再試行してください。';
+  }
+}
+async function regeneratePalette() {
+  if (busy.value || deleting.value || sourceBusy.value || dirty.value || !savedCostume.value) return;
+  busy.value = true;
+  try { await generatePalette(savedCostume.value); } finally { busy.value = false; }
+}
 
 const route = useRoute();
 const router = useRouter();
@@ -70,6 +100,8 @@ let controller: AbortController | undefined;
 function fill(detail: AdminCostumeDto) {
   saveError.value = '';
   invalidField.value = '';
+  savedCostume.value = detail;
+  palette.value = detail.colorPalette;
   Object.assign(form, {
     name: detail.name,
     debutDate: detail.debutDate || '',
@@ -90,6 +122,7 @@ function fill(detail: AdminCostumeDto) {
 watch([id, isNew, retry], async () => {
   controller?.abort();
   if (isNew.value) {
+    savedCostume.value = null; palette.value = null; paletteMessage.value = '';
     Object.assign(form, {
       name: '',
       debutDate: '',
@@ -249,8 +282,11 @@ async function save() {
       return;
     }
     const sourceWarning = saveError.value;
+    const changedThumbnail = isNew.value || data.thumbnailUrl !== savedCostume.value?.thumbnailUrl;
     const detail = isNew.value ? await createCostume(data) : await updateCostume(id.value, data);
     fill(detail);
+    paletteMessage.value = '';
+    if (changedThumbnail && detail.thumbnailUrl) await generatePalette(detail);
     if (sourceWarning) saveError.value = sourceWarning;
     status.value = isNew.value ? '衣装を登録しました。資料を追加できます。' : '衣装を保存しました。';
 
@@ -349,7 +385,7 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
           <h1>{{ isNew ? '衣装を登録' : '衣装を編集' }}</h1>
           <p>{{ isNew ? '基本情報を保存すると、資料を追加できます。' : form.name }}</p>
         </div><span :class="['status-badge', isPublished ? 'published' : 'draft']">{{ isPublished ? '公開中' : '非公開'
-        }}</span>
+          }}</span>
       </div>
       <p v-if="status && !saveError" class="message success" role="status">{{ status }}</p>
       <p v-if="saveError" id="admin-form-error" class="message error" role="alert">{{ saveError }}</p>
@@ -396,6 +432,15 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
               </Transition>
             </div>
           </Transition>
+          <div class="admin-palette-preview">
+            <ColorPaletteBar :palette="shownPalette" />
+            <p v-if="shownPalette" class="field-hint">{{shownPalette.map(color => color.hex + ' ' + (color.ratio *
+              100).toFixed(1) + '%').join(' ／ ') }}</p>
+            <button v-if="!isNew && savedCostume?.thumbnailUrl" type="button" class="button secondary"
+              :disabled="busy || deleting || sourceBusy || dirty" @click="regeneratePalette">カラーパレットを生成／再生成</button>
+            <p v-if="paletteMessage" class="field-hint" role="status">{{ paletteMessage }}</p>
+            <p v-else class="field-hint">サムネイルの登録・変更を保存すると、主要色を自動抽出します。既存衣装は保存後に生成できます。</p>
+          </div>
           <SourceAttribution v-if="form.thumbnailUrl && primarySource" class="admin-thumbnail-attribution"
             :source="primarySource" :costume-id="id" admin />
         </section>

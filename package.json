@@ -10,7 +10,8 @@
     "db:init": "wrangler d1 execute suisei-closet --local --file=docs/database/DDL.sql",
     "db:dev-user": "wrangler d1 execute suisei-closet --local --file=scripts/dev-user.sql",
     "db:setup": "npm run db:init && npm run db:dev-user",
-    "db:csv": "node --experimental-strip-types scripts/import-costumes-csv.mjs"
+    "db:csv": "node --experimental-strip-types scripts/import-costumes-csv.mjs",
+    "palette:backfill:local": "node scripts/backfill-color-palettes.mjs"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^7.3.1",
@@ -29,6 +30,7 @@
     "@vitejs/plugin-vue": "6.0.2",
     "concurrently": "9.2.5",
     "esbuild": "0.28.2",
+    "playwright": "1.62.1",
     "typescript": "5.9.3",
     "vite": "7.3.8",
     "vue-tsc": "3.1.0",

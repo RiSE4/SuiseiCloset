@@ -6,6 +6,7 @@ import { faGrip } from '@fortawesome/free-solid-svg-icons';
 import type { CostumeSummaryDto } from '../costume-model';
 import { safeExternalUrl } from '../media';
 import SourceAttribution from './SourceAttribution.vue';
+import ColorPaletteBar from './ColorPaletteBar.vue';
 
 const props = defineProps<{ costume: CostumeSummaryDto; from?: string; movable?: boolean }>();
 const emit = defineEmits<{ move: [direction: number] }>();
@@ -32,6 +33,7 @@ const destination = computed(() => ({
           decoding="async" @error="failed = true">
         <div v-else class="image-placeholder" aria-hidden="true"><span>✦</span><small>画像未登録</small></div>
       </div>
+      <ColorPaletteBar :palette="costume.colorPalette" />
       <div class="tile-content">
         <div class="tile-meta"><span v-if="costume.debutYear">{{ costume.debutYear }}年</span><span
             v-if="costume.category">{{ costume.category }}</span></div>

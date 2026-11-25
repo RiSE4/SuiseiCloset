@@ -4,10 +4,11 @@ import { parseKeywordsJson } from '../../features/costumes/keywords';
 import { fail, json } from '../http';
 import type { Context } from '../types';
 import { paging } from './validation';
+import { parseColorPalette } from '../../features/costumes/color-palette';
 import { attachSourceAttributions } from './source-title';
 
 /** D1列定義：衣装 */
-export const columnList = 'id,name,debut_date,category,description,thumbnail_url,family_key,keywords_json,search_text,is_published,created_at,updated_at';
+export const columnList = 'id,name,debut_date,category,description,thumbnail_url,color_palette,palette_revision,family_key,keywords_json,search_text,is_published,created_at,updated_at';
 
 /** D1列定義：関連資料 */
 export const sourceColumns = 'id,costume_id,title,thumbnail_url,source_url,sort_order,created_at,updated_at';
@@ -23,6 +24,7 @@ type SummaryRow = Costume & { source_id: number | null; source_url: string | nul
 const summary = (row: SummaryRow): CostumeSummaryDto => ({
   id: row.id, name: row.name, debutYear: row.debut_date ? Number(row.debut_date.slice(0, 4)) : null, category: row.category,
   description: row.description, thumbnailUrl: row.thumbnail_url,
+  colorPalette: parseColorPalette(row.color_palette),
   primarySource: row.source_id === null || row.source_url === null ? null : { id: row.source_id, sourceUrl: row.source_url },
 });
 
@@ -95,6 +97,7 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
         ...baseSummary,
         debutDate: row.debut_date,
         isPublished: row.is_published === 1,
+        paletteRevision: row.palette_revision,
         familyKey: row.family_key,
       };
     }
@@ -171,6 +174,7 @@ export async function detail(ctx: Context, id: string, admin: boolean, status = 
       ...baseDto,
       debutDate: row.debut_date,
       isPublished: row.is_published === 1,
+      paletteRevision: row.palette_revision,
       familyKey: row.family_key,
     };
     return json(adminDto, status);

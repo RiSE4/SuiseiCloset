@@ -24,6 +24,7 @@ export type CostumeSourceCreateResponse = CostumeSourceDto | { id: number };
  * 基本情報DTO
  */
 export interface CostumeSummaryDto {
+  colorPalette: import('./color-palette').ColorPalette | null;
   id: string;
   name: string;
   debutYear: number | null;
@@ -46,6 +47,7 @@ export interface CostumeDetailDto extends CostumeSummaryDto {
  * 管理用：基本情報DTO
  */
 export interface AdminCostumeSummaryDto extends CostumeSummaryDto {
+  paletteRevision: number;
   debutDate: string | null;
   isPublished: boolean;
   familyKey: string | null;

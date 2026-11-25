@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ColorPaletteBar from '../components/ColorPaletteBar.vue';
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
@@ -109,7 +110,9 @@ onBeforeUnmount(() => controller?.abort());
             @error="imageFailed = true">
           <div v-else class="image-placeholder" aria-label="衣装画像は未登録です"><span>✦</span><small>画像未登録</small></div>
         </div>
-        <SourceAttribution v-if="detail.primarySource" :source="detail.primarySource" :costume-id="detail.id" link-account />
+        <ColorPaletteBar :palette="detail.colorPalette" />
+        <SourceAttribution v-if="detail.primarySource" :source="detail.primarySource" :costume-id="detail.id"
+          link-account />
       </div>
       <div class="detail-info">
         <div class="detail-meta"><span v-if="detail.debutYear">{{ detail.debutYear }}年</span><span

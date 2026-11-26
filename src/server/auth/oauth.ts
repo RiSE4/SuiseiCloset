@@ -15,7 +15,7 @@ export const stateCookie = (value: string, age: number) =>
  */
 export async function startLogin(ctx: Context): Promise<Response> {
   if (!ctx.env.DISCORD_CLIENT_ID || !ctx.env.DISCORD_REDIRECT_URI || !ctx.env.DISCORD_CLIENT_SECRET) {
-    return new Response('OAuth is not configured', { status: 503 });
+    return new Response('OAuth is not configured.', { status: 503 });
   }
 
   const state = randomToken();

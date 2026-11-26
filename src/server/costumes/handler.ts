@@ -4,7 +4,7 @@ import { createCostume, createSource, deleteCostume, deleteSource, reorderSource
 import { categories, detail, list, publicationYears } from './queries';
 import { idPattern, InputError } from './validation';
 import { unexpectedResponse } from '../errors';
-import { sourceTitle } from './source-title';
+import { savePalette } from './palette';
 
 /**
  * 衣装・資料・カテゴリのAPIをパス・HTTPメソッドで振り分ける
@@ -29,11 +29,7 @@ export async function costumeApi(ctx: Context, user: User | null, path: string[]
 
       const id = segments[1];
       if (id && !idPattern.test(id)) throw new InputError('衣装IDが不正です');
-      if (id && segments.length === 5 && segments[2] === 'sources' && segments[4] === 'title' && method === 'GET') {
-        const sourceId = Number(segments[3]);
-        if (!Number.isSafeInteger(sourceId) || sourceId < 1) throw new InputError('資料IDが不正です');
-        return await sourceTitle(ctx, id, sourceId, admin);
-      }
+      if (admin && id && segments.length === 3 && segments[2] === 'palette' && method === 'PUT') return await savePalette(ctx, user!, id);
       if (id && segments.length === 2) {
         if (method === 'GET') return await detail(ctx, id, admin);
         if (admin && method === 'PATCH') return await updateCostume(ctx, user!, id);

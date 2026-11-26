@@ -200,7 +200,7 @@ onBeforeUnmount(() => {
 <template>
   <section class="admin-page">
     <div class="page-intro archive-intro admin-intro">
-      <p class="eyebrow">RECORD THE COSTUME</p>
+      <p class="eyebrow">Record the Costume</p>
       <h1>衣装を刻む</h1>
       <RouterLink :to="costumeDestination()" class="orbit-decoration admin-intro-action">
         <OrbitArtwork />

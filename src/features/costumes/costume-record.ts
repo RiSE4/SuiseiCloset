@@ -8,7 +8,11 @@ export interface Costume {
   debut_date: string | null;
   category: string;
   description: string;
+  color_palette: string | null;
+  palette_revision: number;
   thumbnail_url: string | null;
+  thumbnail_source_title: string | null;
+  thumbnail_source_url: string | null;
   /** 同じキーの衣装を関連衣装として扱う（未所属はnull）*/
   family_key: string | null;
   /** キーワード配列をJSON文字列で保存 */

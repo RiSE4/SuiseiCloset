@@ -50,8 +50,8 @@ async function signInLocally() {
             fill="url(#login-crown-gradient)" />
         </svg>
       </span>
-      <p class="eyebrow">WELCOME TO SUISEI CLOSET</p>
-      <h2 id="login-title">{{ optional ? '観測者としてログイン' : '彗星の軌跡を探す' }}</h2>
+      <p class="eyebrow">Welcome to Suisei Closet</p>
+      <h2 id="login-title">{{ optional ? '観測者としてログイン' : '彗星の軌跡をたどる' }}</h2>
       <p class="login-description">{{ optional ? '過去の資料を管理' : '星街すいせいの歴代衣装の資料図鑑' }}</p>
     </div>
 
@@ -61,7 +61,8 @@ async function signInLocally() {
         <ul>
           <li v-if="optional">衣装一覧・資料の閲覧は、ログインせずに利用できます。</li>
           <li>{{ optional ? '観測者としてログインするには、事前登録されたDiscordアカウントが必要です。' : '事前登録されたDiscordアカウントが必要です。' }}</li>
-          <li>オリジナルの三面図への外部サイトリンクを含みます。</li>
+          <li v-if="!optional">オリジナルの三面図への外部サイトリンクを含みます。</li>
+          <li><b>ログイン時、Discordの内部識別子、表示名を認可に使用するために収集します。</b></li>
           <li>衣装情報の管理には管理者権限が必要です。</li>
         </ul>
       </div>

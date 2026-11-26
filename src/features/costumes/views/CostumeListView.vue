@@ -152,7 +152,7 @@ function resetFilters() {
 <template>
   <section class="list-view">
     <div class="page-intro archive-intro">
-      <p class="eyebrow">SEARCH FOR COSTUMES</p>
+      <p class="eyebrow">Search the Costume</p>
       <h1>衣装を探す</h1>
       <span class="orbit-decoration" aria-hidden="true">
         <OrbitArtwork star />
@@ -181,7 +181,7 @@ function resetFilters() {
 
     <div id="costume-results" ref="resultHeading" class="result-heading">
       <h2>検索結果</h2><span v-if="result && !loading" class="result-count"><strong>{{ result.total
-      }}</strong><small>件</small></span>
+          }}</strong><small>件</small></span>
     </div>
     <div class="costume-results-body" :aria-busy="loading">
       <CostumeGrid v-if="result && result.items.length && (loading || !error)" :items="result.items"

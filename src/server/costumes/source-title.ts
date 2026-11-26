@@ -1,5 +1,4 @@
 import { sourceAccountUrl, sourceMedia } from '../../features/costumes/media';
-import { fail, json } from '../http';
 import type { Context } from '../types';
 import { decodeHTML } from 'entities';
 import { fetchYoutubeOwner } from './youtube-owner';
@@ -181,12 +180,4 @@ export async function attachSourceAttributions(ctx: Context, sources: { sourceUr
       }
     }));
   } finally { clearTimeout(timeout); }
-}
-/** 登録済みの資料だけを対象にする。非公開衣装は権限確認済みの管理APIからだけ取得可能。 */
-export async function sourceTitle(ctx: Context, costumeId: string, sourceId: number, admin = false): Promise<Response> {
-  const source = await ctx.env.DB.prepare(`SELECT s.source_url FROM costume_source s JOIN costume c ON c.id=s.costume_id
-    WHERE s.id=? AND s.costume_id=? ${admin ? '' : 'AND c.is_published=1'}`).bind(sourceId, costumeId).first<{ source_url: string }>();
-  if (!source) return fail('資料が見つかりません', 404);
-  return json(await reliableTitle(source.source_url,
-    [new URL(ctx.request.url).hostname, new URL(ctx.env.APP_ORIGIN).hostname]));
 }

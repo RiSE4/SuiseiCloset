@@ -4,10 +4,11 @@ import { parseKeywordsJson } from '../../features/costumes/keywords';
 import { fail, json } from '../http';
 import type { Context } from '../types';
 import { paging } from './validation';
+import { parseColorPalette } from '../../features/costumes/color-palette';
 import { attachSourceAttributions } from './source-title';
 
 /** D1列定義：衣装 */
-export const columnList = 'id,name,debut_date,category,description,thumbnail_url,family_key,keywords_json,search_text,is_published,created_at,updated_at';
+export const columnList = 'id,name,debut_date,category,description,thumbnail_url,thumbnail_source_title,thumbnail_source_url,color_palette,palette_revision,family_key,keywords_json,search_text,is_published,created_at,updated_at';
 
 /** D1列定義：関連資料 */
 export const sourceColumns = 'id,costume_id,title,thumbnail_url,source_url,sort_order,created_at,updated_at';
@@ -23,8 +24,14 @@ type SummaryRow = Costume & { source_id: number | null; source_url: string | nul
 const summary = (row: SummaryRow): CostumeSummaryDto => ({
   id: row.id, name: row.name, debutYear: row.debut_date ? Number(row.debut_date.slice(0, 4)) : null, category: row.category,
   description: row.description, thumbnailUrl: row.thumbnail_url,
+  thumbnailSourceTitle: row.thumbnail_source_title, thumbnailSourceUrl: row.thumbnail_source_url,
+  colorPalette: parseColorPalette(row.color_palette),
   primarySource: row.source_id === null || row.source_url === null ? null : { id: row.source_id, sourceUrl: row.source_url },
 });
+
+/** 共通サムネイルの参照元が設定されていない場合のフォールバック */
+const fallbackSources = (costume: CostumeSummaryDto) => costume.primarySource &&
+  (!costume.thumbnailSourceTitle?.trim() || !costume.thumbnailSourceUrl?.trim()) ? [costume.primarySource] : [];
 
 /** D1の資料レコードを、画面用DTOに変換 */
 export const sourceDto = (row: CostumeSource): CostumeSourceDto => ({
@@ -95,6 +102,7 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
         ...baseSummary,
         debutDate: row.debut_date,
         isPublished: row.is_published === 1,
+        paletteRevision: row.palette_revision,
         familyKey: row.family_key,
       };
     }
@@ -102,7 +110,7 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
     return baseSummary;
   });
 
-  await attachSourceAttributions(ctx, items.flatMap(item => item.primarySource ? [item.primarySource] : []));
+  await attachSourceAttributions(ctx, items.flatMap(fallbackSources));
   return json(
     {
       items,
@@ -154,6 +162,7 @@ export async function detail(ctx: Context, id: string, admin: boolean, status = 
 
   const baseDto: CostumeDetailDto = {
     ...summary(row),
+    debutDate: row.debut_date,
     keywords: parseKeywordsJson(row.keywords_json),
     sources: sourcesResult.results.map(sourceDto),
     relatedCostumes: relatedResults.map(summary),
@@ -161,8 +170,8 @@ export async function detail(ctx: Context, id: string, admin: boolean, status = 
 
   await attachSourceAttributions(ctx, [
     ...baseDto.sources,
-    ...(baseDto.primarySource ? [baseDto.primarySource] : []),
-    ...baseDto.relatedCostumes.flatMap(costume => costume.primarySource ? [costume.primarySource] : []),
+    ...fallbackSources(baseDto),
+    ...baseDto.relatedCostumes.flatMap(fallbackSources),
   ]);
 
   //管理用プロペティを追加して返却
@@ -171,6 +180,7 @@ export async function detail(ctx: Context, id: string, admin: boolean, status = 
       ...baseDto,
       debutDate: row.debut_date,
       isPublished: row.is_published === 1,
+      paletteRevision: row.palette_revision,
       familyKey: row.family_key,
     };
     return json(adminDto, status);

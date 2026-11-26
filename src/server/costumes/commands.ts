@@ -47,7 +47,6 @@ function relatedUpdate(ctx: Context, id: string, familyKey: string, guard?: { id
   `).bind(familyKey, id, ...(guard ? [guard.id, ...(guard.name !== undefined ? [guard.name, guard.keywords] : [])] : []));
 }
 
-/** Only server-owned column names enter SQL; all request values remain bound parameters. */
 function patchSet(fields: Record<string, unknown>, columns: Record<string, string>) {
   const keys = Object.keys(columns).filter(key => has(fields, key));
   return { assignments: keys.map(key => `${columns[key]} = ?`), values: keys.map(key => fields[key]) };
@@ -100,13 +99,14 @@ export async function createCostume(ctx: Context, user: User): Promise<Response>
   const familyParams = relatedId ? [relatedId, family, family] : [null];
   const insertStatement = ctx.env.DB.prepare(`
     INSERT INTO costume(
-      id, name, debut_date, category, description, thumbnail_url,
+      id, name, debut_date, category, description, thumbnail_url, thumbnail_source_title, thumbnail_source_url,
       family_key, keywords_json, search_text, is_published
     )
-    VALUES(${nextCostumeIdSql}, ?, ?, ?, ?, ?, ${familyExpression}, ?, ?, ?)
+    VALUES(${nextCostumeIdSql}, ?, ?, ?, ?, ?, ?, ?, ${familyExpression}, ?, ?, ?)
     RETURNING id
   `).bind(
     name, debutDate, category, description, thumbnailUrl,
+    fields.thumbnailSourceTitle ?? null, fields.thumbnailSourceUrl ?? null,
     ...familyParams, JSON.stringify(keywords), makeSearchText(name, keywords),
     isPublished
   );
@@ -141,13 +141,14 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
   const fields = costumeInput(await requiredJson(ctx), false);
   const changesSearch = has(fields, 'name') || has(fields, 'keywords');
 
-  // Bound retries prevent contention from creating an unbounded request. No new HTTP conflict contract.
+  // 競合によって処理が無制限に続かないよう再試行回数に上限設定
   for (let attempt = 0; attempt < 5; attempt++) {
     if (attempt > 0) current = await loadCurrent();
     if (!current) return fail('衣装が見つかりません', 404);
     const patch = patchSet(fields, {
       name: 'name', debutDate: 'debut_date', category: 'category', description: 'description',
       thumbnailUrl: 'thumbnail_url', isPublished: 'is_published',
+      thumbnailSourceTitle: 'thumbnail_source_title', thumbnailSourceUrl: 'thumbnail_source_url',
     });
     if (has(fields, 'isPublished')) {
       const index = patch.assignments.indexOf('is_published = ?');
@@ -171,7 +172,7 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
       const relation = relatedId ? await relatedKey(ctx, relatedId, id, current.family_key) : null;
       const family = relation?.key ?? null;
       if (relatedId && relation?.targetNeedsUpdate) {
-        // A failed search CAS must not leave changes on the related target either.
+        // 検索情報の比較更新が失敗した場合は、関連先にも変更を残さない
         statements.push(relatedUpdate(ctx, relatedId, relation.key, guard ?? { id }));
       }
       patch.assignments.push(relatedId
@@ -186,7 +187,7 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
       WHERE id = ?${changesSearch ? ' AND name = ? AND keywords_json = ?' : ''}
       RETURNING id
     `).bind(...patch.values, id, ...(guard ? [guard.name, guard.keywords] : [])));
-    // A CAS miss is a no-op: no audit entry. Audit failure still rolls back the entire batch.
+    // 比較更新の条件が不一致なら更新も監査記録も行わない
     statements.push(ctx.env.DB.prepare(`
       INSERT INTO audit_log(actor_discord_id, action, target_id)
       SELECT ?, 'costume.update', ? WHERE changes() = 1
@@ -280,7 +281,6 @@ export async function updateSource(ctx: Context, user: User, id: number): Promis
 
   const updatedRow = await loadSource(ctx, id);
 
-  // Preserve the existing 500 when the saved source cannot be reloaded.
   if (!updatedRow) throw new Error('Saved source could not be reloaded');
   return json(sourceDto(updatedRow));
 }

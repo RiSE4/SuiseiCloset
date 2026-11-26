@@ -17,13 +17,13 @@ export interface SourceAttribution {
   authorUrl: string | null;
 }
 
-/** Creation may succeed even when the subsequent SELECT no longer finds the row. */
 export type CostumeSourceCreateResponse = CostumeSourceDto | { id: number };
 
 /**
  * 基本情報DTO
  */
 export interface CostumeSummaryDto {
+  colorPalette: import('./color-palette').ColorPalette | null;
   id: string;
   name: string;
   debutYear: number | null;
@@ -31,12 +31,15 @@ export interface CostumeSummaryDto {
   description: string;
   thumbnailUrl: string | null;
   primarySource: Pick<CostumeSourceDto, 'id' | 'sourceUrl' | 'attribution'> | null;
+  thumbnailSourceTitle: string | null;
+  thumbnailSourceUrl: string | null;
 }
 
 /**
  * 詳細画面用DTO
  */
 export interface CostumeDetailDto extends CostumeSummaryDto {
+  debutDate: string | null;
   keywords: string[];
   sources: CostumeSourceDto[];
   relatedCostumes: CostumeSummaryDto[];
@@ -46,6 +49,7 @@ export interface CostumeDetailDto extends CostumeSummaryDto {
  * 管理用：基本情報DTO
  */
 export interface AdminCostumeSummaryDto extends CostumeSummaryDto {
+  paletteRevision: number;
   debutDate: string | null;
   isPublished: boolean;
   familyKey: string | null;
@@ -70,6 +74,8 @@ export interface CostumeListResponse<T extends CostumeSummaryDto = CostumeSummar
  * 新規登録用データ
  */
 export interface CostumeCreateRequest {
+  thumbnailSourceTitle?: string | null;
+  thumbnailSourceUrl?: string | null;
   name: string;
   debutDate?: string | null;
   category?: string;

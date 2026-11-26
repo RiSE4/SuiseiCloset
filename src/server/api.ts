@@ -5,6 +5,28 @@ import { currentUser } from './auth/sessions';
 import { costumeApi } from './costumes/handler';
 import { userApi } from './users/handler';
 import { unexpectedResponse } from './errors';
+import { publicRead } from './public-cache';
+
+/** 不明なパス・メソッドはセッション照会より先に終了し、ID・入力値は既存ハンドラで検証 */
+function knownRoute(path: string[], method: string): boolean {
+  const route = path.join('/');
+  if (method === 'GET' && /^(?:me|categories|pub-years|costumes(?:\/[^/]+)?)$/.test(route))
+    return true;
+
+  if (!route.startsWith('admin/'))
+    return false;
+
+  if (method === 'GET')
+    return /^admin\/(?:users|categories|pub-years|costumes(?:\/[^/]+)?)$/.test(route);
+
+  if (method === 'POST')
+    return /^admin\/(?:users|costumes(?:\/[^/]+\/sources)?)$/.test(route);
+
+  if (method === 'PATCH' || method === 'DELETE')
+    return /^admin\/(?:users|costumes|sources)\/[^/]+$/.test(route);
+
+  return method === 'PUT' && /^admin\/costumes\/[^/]+\/(?:palette|sources\/order)$/.test(route);
+}
 
 /**
  * /api配下の入り口
@@ -18,9 +40,13 @@ export async function api(ctx: Context): Promise<Response> {
   const method = ctx.request.method;
 
   try {
-    const user = await currentUser(ctx);
+    if (!knownRoute(path, method))
+      return fail('見つかりません', 404);
+
     //認証不要の場合はuserがnullでも成功とする
     if (path.length === 1 && path[0] === 'me' && method === 'GET') {
+      const user = await currentUser(ctx);
+
       if (!user && oauthEnabled(ctx.env)) {
         return fail('ログインまたは利用許可が必要です', 401);
       }
@@ -29,13 +55,17 @@ export async function api(ctx: Context): Promise<Response> {
     }
 
     if (path[0] === 'costumes' || path[0] === 'categories' || path[0] === 'pub-years') {
-      if (!user && oauthEnabled(ctx.env)) {
-        return fail('ログインまたは利用許可が必要です', 401);
-      }
+      return await publicRead(ctx, async () => {
+        const user = await currentUser(ctx);
 
-      return await costumeApi(ctx, user, path, method);
+        if (!user && oauthEnabled(ctx.env))
+          return fail('ログインまたは利用許可が必要です', 401);
+
+        return costumeApi(ctx, user, path, method);
+      });
     }
     //管理系操作（ログイン必須）
+    const user = await currentUser(ctx);
     if (!user) return fail('ログインまたは利用許可が必要です', 401);
     if (path[0] !== 'admin') return fail('見つかりません', 404);
     if (path[1] === 'users' ? user.role !== 'admin' : !['admin', 'editor'].includes(user.role)) {

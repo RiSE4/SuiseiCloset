@@ -10,7 +10,7 @@ export const has = (body: object, key: string) =>
   Object.prototype.hasOwnProperty.call(body, key);
 
 /** 衣装の登録・更新で受け付ける項目 */
-const costumeKeys = new Set(['name', 'debutDate', 'category', 'description', 'thumbnailUrl', 'keywords', 'relatedCostumeId', 'isPublished']);
+const costumeKeys = new Set(['name', 'debutDate', 'category', 'description', 'thumbnailUrl', 'thumbnailSourceTitle', 'thumbnailSourceUrl', 'keywords', 'relatedCostumeId', 'isPublished']);
 
 /** 資料の登録・更新で受け付ける項目 */
 const sourceKeys = new Set(['title', 'thumbnailUrl', 'sourceUrl']);
@@ -96,6 +96,16 @@ export function costumeInput(body: Record<string, unknown>, create: boolean): Co
   }
 
   const fields: CostumeUpdateRequest = {};
+
+  if (has(body, 'thumbnailSourceTitle')) {
+    fields.thumbnailSourceTitle = body.thumbnailSourceTitle === null ? null : text(body.thumbnailSourceTitle, '参照元', 500) || null;
+  }
+
+  if (has(body, 'thumbnailSourceUrl')) {
+    fields.thumbnailSourceUrl = body.thumbnailSourceUrl === null || body.thumbnailSourceUrl === '' ||
+      (typeof body.thumbnailSourceUrl === 'string' && !body.thumbnailSourceUrl.trim())
+      ? null : nullableUrl(body.thumbnailSourceUrl, 'リンク先');
+  }
 
   //name
   if (has(body, 'name')) {

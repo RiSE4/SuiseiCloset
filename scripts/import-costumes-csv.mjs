@@ -12,7 +12,7 @@ const baseHeaders = ['衣装名', '初出日（yyyy-mm-dd）', '説明', '共通
 const sourceHeaders = ['資料タイトル', '参照先URL', '画像URL'];
 export const csvHeaders = [...baseHeaders, ...Array.from({ length: 5 }, (_, i) => sourceHeaders.map(key => `${key}${i + 1}`)).flat()];
 
-// ExcelのCSV（出典符内のカンマ・改行・二重出典符、CRLF、UTF-8 BOM）を扱う。
+// ExcelのCSV（参照符内のカンマ・改行・二重参照符、CRLF、UTF-8 BOM）を扱う。
 export function parseCsv(input) {
   const text = input.replace(/^\uFEFF/, '');
   const rows = [];
@@ -38,11 +38,11 @@ export function parseCsv(input) {
       line++; rowLine = line;
     } else if (char === '"' && !field && !closed) quoted = true;
     else {
-      if (closed || char === '"') throw Error(`CSV ${line}行目: 出典符の使い方が不正です`);
+      if (closed || char === '"') throw Error(`CSV ${line}行目: 参照符の使い方が不正です`);
       field += char;
     }
   }
-  if (quoted) throw Error(`CSV ${rowLine}行目: 出典符が閉じていません`);
+  if (quoted) throw Error(`CSV ${rowLine}行目: 参照符が閉じていません`);
   if (cells.length || field || closed) endRow();
   return rows.filter(row => row.cells.some(cell => cell.trim()));
 }

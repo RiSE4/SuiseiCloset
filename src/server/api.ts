@@ -10,14 +10,14 @@ import { publicRead } from './public-cache';
 /** 不明なパス・メソッドはセッション照会より先に終了し、ID・入力値は既存ハンドラで検証 */
 function knownRoute(path: string[], method: string): boolean {
   const route = path.join('/');
-  if (method === 'GET' && /^(?:me|categories|pub-years|costumes(?:\/[^/]+(?:\/sources\/[^/]+\/title)?)?)$/.test(route))
+  if (method === 'GET' && /^(?:me|categories|pub-years|costumes(?:\/[^/]+)?)$/.test(route))
     return true;
 
   if (!route.startsWith('admin/'))
     return false;
 
   if (method === 'GET')
-    return /^admin\/(?:users|categories|pub-years|costumes(?:\/[^/]+(?:\/sources\/[^/]+\/title)?)?)$/.test(route);
+    return /^admin\/(?:users|categories|pub-years|costumes(?:\/[^/]+)?)$/.test(route);
 
   if (method === 'POST')
     return /^admin\/(?:users|costumes(?:\/[^/]+\/sources)?)$/.test(route);

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-import { faCrown, faShirt, faWrench, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faCrown, faShirt, faWrench, faUser, faCircleInfo } from '@fortawesome/free-solid-svg-icons';
 import { authState, refreshAuth } from './features/auth/auth';
 import { logout } from './features/auth/auth-api';
 
@@ -159,6 +159,12 @@ async function signOut() {
               @click="menuOpen = false">
               <FontAwesomeIcon :icon="faUser" class="mobile-menu-icon" aria-hidden="true" />
               <span>観測者の編集</span>
+            </RouterLink>
+
+            <RouterLink class="mobile-menu-link" :class="{ 'is-active': route.path === '/about' }"
+              to="/about" @click="menuOpen = false">
+              <FontAwesomeIcon :icon="faCircleInfo" class="mobile-menu-icon" aria-hidden="true" />
+              <span>サービス概要</span>
             </RouterLink>
           </nav>
 

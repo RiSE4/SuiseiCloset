@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wrangler pages dev public --ip 127.0.0.1 --port 8789 --local-protocol=https\"",
+    "dev": "concurrently -k \"vite\" \"node --import ./scripts/wrangler-local-env.mjs node_modules/wrangler/bin/wrangler.js pages dev public --ip 127.0.0.1 --port 8789 --local-protocol=https\"",
     "build": "vue-tsc --noEmit && vite build",
-    "preview": "wrangler pages dev dist",
+    "preview": "node --import ./scripts/wrangler-local-env.mjs node_modules/wrangler/bin/wrangler.js pages dev dist",
     "db:init": "wrangler d1 execute suisei-closet --local --file=docs/database/DDL.sql",
     "db:dev-user": "wrangler d1 execute suisei-closet --local --file=scripts/dev-user.sql",
     "db:setup": "npm run db:init && npm run db:dev-user",

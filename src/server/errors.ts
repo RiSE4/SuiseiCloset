@@ -1,6 +1,6 @@
 import { fail } from './http';
 
-type Operation = 'api' | 'users' | 'costumes' | 'auth.callback' | 'auth.login' | 'auth.logout' | 'auth.dev';
+type Operation = 'api' | 'users' | 'costumes' | 'auth.callback' | 'auth.login' | 'auth.logout' | 'auth.dev' | 'auth.cleanup';
 
 /**
  * 予期しないエラーを安全に記録し、500エラーを返却

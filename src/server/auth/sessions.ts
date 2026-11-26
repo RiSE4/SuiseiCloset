@@ -1,6 +1,7 @@
 import type { Context, User } from '../types';
 import { cookie, requestOrigin } from '../http';
 import { randomToken, sha256 } from './tokens';
+import { cleanupExpiredAuth } from './cleanup';
 
 /**
  * Set-Cookieの定義
@@ -31,6 +32,7 @@ export async function createSession(ctx: Context, id: string): Promise<string> {
     "INSERT INTO sessions(token_hash,discord_id,expires_at) VALUES(?,?,datetime('now','+7 days'))"
   ).bind(await sha256(session), id).run();
 
+  ctx.waitUntil(cleanupExpiredAuth(ctx));
   return sessionCookie(session, maxAge);
 }
 

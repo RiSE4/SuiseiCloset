@@ -9,7 +9,7 @@ export const PALETTE_CONFIG = Object.freeze({
 export interface PaletteColor { hex: string; ratio: number }
 export type ColorPalette = PaletteColor[];
 
-/** Shared with the server. Never render unvalidated colors. */
+/** カラーパレットを検証 */
 export function validateColorPalette(value: unknown): ColorPalette | null {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length < PALETTE_CONFIG.minColors || value.length > PALETTE_CONFIG.maxColors) throw new Error('色数が不正です');
@@ -33,7 +33,7 @@ function combine(a: Group, b: Group) {
   a.lab = rgbToLab(mean(a));
 }
 
-/** Bounded histogram, fixed seed order, frequency-weighted RGB centroids. */
+/** カラーパレットに適用する色を抽出 */
 export function extractColorPalette(pixels: Uint8ClampedArray): ColorPalette | null {
   if (pixels.length % 4 || pixels.length > PALETTE_CONFIG.analysisSize ** 2 * 4) throw new Error('解析サイズが不正です');
   const histogram = new Map<number, Group>();
@@ -59,7 +59,7 @@ export function extractColorPalette(pixels: Uint8ClampedArray): ColorPalette | n
     combine(groups[nearest], candidate);
   }
   const active = groups.filter(g => g.count);
-  // Each merge reuses cached Lab coordinates. At most 512 histogram entries.
+  // 統合のたびにキャッシュ済みのLab座標を再利用
   while (active.length > 1) {
     let x = 0, y = 1, distance = Infinity;
     for (let i = 0; i < active.length; i++) for (let j = i + 1; j < active.length; j++) {

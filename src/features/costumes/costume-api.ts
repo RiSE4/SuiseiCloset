@@ -99,7 +99,7 @@ export const updateCostumeSource = (id: number, payload: CostumeSourceUpdateRequ
  */
 export const deleteCostumeSource = (id: number) => requestJson<{ ok: boolean }>(`/api/admin/sources/${id}`, undefined, 'DELETE');
 
-/** Save only if the source image revision still matches. */
+/** 解析元の画像のリビジョンが一致している場合だけ保存 */
 export const saveCostumePalette = (detail: AdminCostumeDto, palette: ColorPalette | null) =>
   requestJson<{ colorPalette: ColorPalette | null }>(`/api/admin/costumes/${encodeURIComponent(detail.id)}/palette`, undefined, 'PUT', {
     thumbnailUrl: detail.thumbnailUrl, revision: detail.paletteRevision, palette,

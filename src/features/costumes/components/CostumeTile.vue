@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { faGrip } from '@fortawesome/free-solid-svg-icons';
 import type { CostumeSummaryDto } from '../costume-model';
 import { safeExternalUrl } from '../media';
-import SourceAttribution from './SourceAttribution.vue';
+import ThumbnailAttribution from './ThumbnailAttribution.vue';
 import ColorPaletteBar from './ColorPaletteBar.vue';
 
 const props = defineProps<{ costume: CostumeSummaryDto; from?: string; movable?: boolean }>();
@@ -38,7 +38,7 @@ const destination = computed(() => ({
         <div class="tile-meta"><span v-if="costume.debutYear">{{ costume.debutYear }}年</span><span
             v-if="costume.category">{{ costume.category }}</span></div>
         <h3>{{ costume.name }}</h3>
-        <SourceAttribution v-if="costume.primarySource" :source="costume.primarySource" :costume-id="costume.id" />
+        <ThumbnailAttribution :costume="costume" />
       </div>
     </RouterLink>
 

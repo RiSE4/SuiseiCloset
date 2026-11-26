@@ -149,7 +149,7 @@ async function save(row: Row) {
 <template>
   <section class="admin-page observer-page" aria-labelledby="observer-title">
     <div class="page-intro archive-intro observer-intro">
-      <p class="eyebrow">EDIT OBSERVERS</p>
+      <p class="eyebrow">Edit Observers</p>
       <h1 id="observer-title">観測者の編集</h1>
       <button class="button primary observer-intro-action" type="button" :disabled="loading || !!error || hasNew"
         @click="add">観測者を追加</button>

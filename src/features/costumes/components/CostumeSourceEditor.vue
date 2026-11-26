@@ -190,7 +190,7 @@ defineExpose({ saveOrder });
   <section class="admin-section source-manager" aria-labelledby="sources-title">
     <div class="admin-section-heading">
       <div>
-        <p class="eyebrow">SOURCES</p>
+        <p class="eyebrow">Sources</p>
         <h2 id="sources-title">関連資料</h2>
       </div><span>{{ orderedSources.length }}件</span>
     </div>

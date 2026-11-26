@@ -30,6 +30,5 @@ const segments = computed(() => {
   box-sizing: border-box;
   outline: 1px solid #8886;
   outline-offset: -1px;
-  margin-top: 12px;
 }
 </style>

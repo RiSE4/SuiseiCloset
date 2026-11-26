@@ -15,7 +15,7 @@ import { adminListBackPath } from '../admin-list-navigation';
 import KeywordInput from '../components/KeywordInput.vue';
 import RelatedCostumeSelector from '../components/RelatedCostumeSelector.vue';
 import CostumeSourceEditor from '../components/CostumeSourceEditor.vue';
-import SourceAttribution from '../components/SourceAttribution.vue';
+import ThumbnailAttribution from '../components/ThumbnailAttribution.vue';
 
 import ColorPaletteBar from '../components/ColorPaletteBar.vue';
 import { analyzeThumbnail } from '../analyze-thumbnail';
@@ -54,7 +54,7 @@ const returnTo = computed(() => adminListBackPath(route.query.from));
 const isNew = computed(() => route.path === '/admin/costumes/new');
 const id = computed(() => String(route.params.id || ''));
 /** 編集中の基本情報。日付はYYYY-MM-DDの入力文字列で保持 */
-const form = reactive({ name: '', debutDate: '', category: '', description: '', thumbnailUrl: '', keywords: [] as string[] });
+const form = reactive({ name: '', debutDate: '', category: '', description: '', thumbnailUrl: '', thumbnailSourceTitle: '', thumbnailSourceUrl: '', keywords: [] as string[] });
 const isPublished = ref(false);
 /** 関連グループへの所属を指定するために選択中の衣装 */
 const related = ref<CostumeSummaryDto | null>(null);
@@ -108,6 +108,8 @@ function fill(detail: AdminCostumeDto) {
     category: detail.category,
     description: detail.description,
     thumbnailUrl: detail.thumbnailUrl || '',
+    thumbnailSourceTitle: detail.thumbnailSourceTitle || '',
+    thumbnailSourceUrl: detail.thumbnailSourceUrl || '',
     keywords: [...detail.keywords]
   });
   isPublished.value = detail.isPublished;
@@ -129,6 +131,7 @@ watch([id, isNew, retry], async () => {
       category: '',
       description: '',
       thumbnailUrl: '',
+      thumbnailSourceTitle: '', thumbnailSourceUrl: '',
       keywords: []
     });
     isPublished.value = false;
@@ -229,6 +232,20 @@ function payload(): CostumeCreateRequest {
     }
   }
 
+  const thumbnailSourceTitle = form.thumbnailSourceTitle.trim() || null;
+  if (form.thumbnailSourceTitle.length > 500)
+    invalid('thumbnailSourceTitle', '参照元は500文字以内にしてください。');
+  let thumbnailSourceUrl: string | null = null;
+
+  if (form.thumbnailSourceUrl.trim()) {
+    try {
+      thumbnailSourceUrl = validateHttpsUrl(form.thumbnailSourceUrl.trim());
+      if (thumbnailSourceUrl.length > 2048)
+        throw new Error();
+    } catch {
+      invalid('thumbnailSourceUrl', 'リンク先には2048文字以内のHTTPS URLを入力してください。');
+    }
+  }
   try {
     validateKeywords(form.keywords);
   }
@@ -243,6 +260,7 @@ function payload(): CostumeCreateRequest {
     category: form.category.trim(),
     description: form.description.trim(),
     thumbnailUrl,
+    thumbnailSourceTitle, thumbnailSourceUrl,
     keywords: [...form.keywords],
     ...(isNew.value ? related.value ? { relatedCostumeId: related.value.id } : {} : relatedTouched.value ? { relatedCostumeId: related.value?.id || null } : {})
   };
@@ -381,7 +399,7 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
     <template v-else>
       <div class="admin-heading">
         <div>
-          <p class="eyebrow">COSTUME EDITOR</p>
+          <p class="eyebrow">Costume Editor</p>
           <h1>{{ isNew ? '衣装を登録' : '衣装を編集' }}</h1>
           <p>{{ isNew ? '基本情報を保存すると、資料を追加できます。' : form.name }}</p>
         </div><span :class="['status-badge', isPublished ? 'published' : 'draft']">{{ isPublished ? '公開中' : '非公開'
@@ -394,7 +412,7 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
         <section class="admin-section" aria-labelledby="basic-title">
           <div class="admin-section-heading">
             <div>
-              <p class="eyebrow">BASIC INFO</p>
+              <p class="eyebrow">Basic Info</p>
               <h2 id="basic-title">基本情報</h2>
             </div>
           </div>
@@ -420,35 +438,53 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
                 :aria-invalid="invalidField === 'thumbnailUrl'"
                 :aria-describedby="invalidField === 'thumbnailUrl' ? 'admin-form-error' : undefined"
                 placeholder="https://..."></label>
+            <label class="form-field"><span>参照元</span><input v-model="form.thumbnailSourceTitle" maxlength="500"
+                :disabled="busy || deleting" :aria-invalid="invalidField === 'thumbnailSourceTitle'"
+                :aria-describedby="invalidField === 'thumbnailSourceTitle' ? 'admin-form-error' : undefined"
+                placeholder="空欄の場合は先頭の資料を使用"></label>
+            <label class="form-field"><span>リンク先</span><input v-model="form.thumbnailSourceUrl" type="url"
+                maxlength="2048" :disabled="busy || deleting" :aria-invalid="invalidField === 'thumbnailSourceUrl'"
+                :aria-describedby="invalidField === 'thumbnailSourceUrl' ? 'admin-form-error' : undefined"
+                placeholder="空欄の場合は先頭の資料を使用"></label>
           </div>
 
-          <Transition name="preview-fade">
-            <div v-if="form.thumbnailUrl" class="admin-image-preview">
-              <Transition name="preview-fade" mode="out-in">
-                <img v-if="previewUrl && !imageFailed" :key="previewUrl" :src="previewUrl"
-                  :class="{ 'is-loaded': imageLoaded }" alt="共通サムネイルのプレビュー" @load="setPreviewState"
-                  @error="setPreviewState($event, true)">
-                <div v-else key="placeholder" class="image-placeholder"><span>✦</span><small>画像を表示できません</small></div>
+          <div class="admin-thumbnail-layout">
+            <div class="admin-thumbnail-column">
+              <Transition name="preview-fade">
+                <div v-if="form.thumbnailUrl" class="admin-image-preview">
+                  <Transition name="preview-fade" mode="out-in">
+                    <img v-if="previewUrl && !imageFailed" :key="previewUrl" :src="previewUrl"
+                      :class="{ 'is-loaded': imageLoaded }" alt="共通サムネイルのプレビュー" @load="setPreviewState"
+                      @error="setPreviewState($event, true)">
+                    <div v-else key="placeholder" class="image-placeholder"><span>✦</span><small>画像を表示できません</small>
+                    </div>
+                  </Transition>
+                </div>
               </Transition>
+              <ThumbnailAttribution v-if="form.thumbnailUrl" class="admin-thumbnail-attribution"
+                :costume="{ ...form, primarySource: primarySource ?? null }" />
             </div>
-          </Transition>
-          <div class="admin-palette-preview">
-            <ColorPaletteBar :palette="shownPalette" />
-            <p v-if="shownPalette" class="field-hint">{{shownPalette.map(color => color.hex + ' ' + (color.ratio *
-              100).toFixed(1) + '%').join(' ／ ') }}</p>
-            <button v-if="!isNew && savedCostume?.thumbnailUrl" type="button" class="button secondary"
-              :disabled="busy || deleting || sourceBusy || dirty" @click="regeneratePalette">カラーパレットを生成／再生成</button>
-            <p v-if="paletteMessage" class="field-hint" role="status">{{ paletteMessage }}</p>
-            <p v-else class="field-hint">サムネイルの登録・変更を保存すると、主要色を自動抽出します。既存衣装は保存後に生成できます。</p>
+            <div class="admin-palette-preview">
+              <ColorPaletteBar :palette="shownPalette" />
+              <ul v-if="shownPalette" class="field-hint admin-palette-colors"
+                :class="{ 'two-columns': shownPalette.length > 5 }" aria-label="主要色の内訳">
+                <li v-for="color in shownPalette" :key="color.hex">
+                  <span>{{ color.hex }}</span>
+                  <span>{{ (color.ratio * 100).toFixed(1) }}%</span>
+                </li>
+              </ul>
+              <button v-if="!isNew && savedCostume?.thumbnailUrl" type="button" class="button secondary"
+                :disabled="busy || deleting || sourceBusy || dirty" @click="regeneratePalette">カラーパレットを生成／再生成</button>
+              <p v-if="paletteMessage" class="field-hint" role="status">{{ paletteMessage }}</p>
+              <p v-else class="field-hint">サムネイルの登録・変更を保存すると、主要色を自動抽出します。既存衣装は保存後に生成できます。</p>
+            </div>
           </div>
-          <SourceAttribution v-if="form.thumbnailUrl && primarySource" class="admin-thumbnail-attribution"
-            :source="primarySource" :costume-id="id" admin />
         </section>
 
         <section class="admin-section" aria-labelledby="keywords-title">
           <div class="admin-section-heading">
             <div>
-              <p class="eyebrow">SEARCH WORDS</p>
+              <p class="eyebrow">Search Words</p>
               <h2 id="keywords-title">キーワード</h2>
             </div>
           </div>
@@ -459,7 +495,7 @@ onBeforeRouteLeave(() => !(dirty.value || sourceDraftDirty.value) || window.conf
         <section class="admin-section" aria-labelledby="related-title">
           <div class="admin-section-heading">
             <div>
-              <p class="eyebrow">RELATED COSTUMES</p>
+              <p class="eyebrow">Related Costumes</p>
               <h2 id="related-title">関連衣装</h2>
             </div>
           </div>

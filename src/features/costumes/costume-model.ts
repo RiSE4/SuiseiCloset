@@ -17,7 +17,6 @@ export interface SourceAttribution {
   authorUrl: string | null;
 }
 
-/** Creation may succeed even when the subsequent SELECT no longer finds the row. */
 export type CostumeSourceCreateResponse = CostumeSourceDto | { id: number };
 
 /**
@@ -32,12 +31,15 @@ export interface CostumeSummaryDto {
   description: string;
   thumbnailUrl: string | null;
   primarySource: Pick<CostumeSourceDto, 'id' | 'sourceUrl' | 'attribution'> | null;
+  thumbnailSourceTitle: string | null;
+  thumbnailSourceUrl: string | null;
 }
 
 /**
  * 詳細画面用DTO
  */
 export interface CostumeDetailDto extends CostumeSummaryDto {
+  debutDate: string | null;
   keywords: string[];
   sources: CostumeSourceDto[];
   relatedCostumes: CostumeSummaryDto[];
@@ -72,6 +74,8 @@ export interface CostumeListResponse<T extends CostumeSummaryDto = CostumeSummar
  * 新規登録用データ
  */
 export interface CostumeCreateRequest {
+  thumbnailSourceTitle?: string | null;
+  thumbnailSourceUrl?: string | null;
   name: string;
   debutDate?: string | null;
   category?: string;

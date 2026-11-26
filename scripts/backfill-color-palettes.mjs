@@ -1,4 +1,4 @@
-/** Local D1 only. NULL palettes only. Images remain in browser memory. */
+/** ローカルD1のパレットがNULLの衣装だけを対象にする。画像はブラウザーのメモリー内だけで扱う。 */
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
@@ -37,7 +37,7 @@ try {
   if (dryRun || !result.results.length) process.exitCode = 0;
   else {
     const bundle = await build({ entryPoints: ['src/features/costumes/analyze-thumbnail.ts'], bundle: true, write: false, format: 'iife', globalName: 'paletteAnalysis', platform: 'browser', logLevel: 'silent' });
-    // A real local origin lets normal browser CORS checks apply to image fetches.
+    // ローカルのオリジンを用意し、画像取得時にブラウザーの通常のCORS検証が働くようにする。
     server = createServer((_req, res) => { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><title>Local palette backfill</title>'); });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -50,7 +50,7 @@ try {
       try {
         const palette = await page.evaluate(url => paletteAnalysis.analyzeThumbnail(url), row.thumbnail_url);
         const json = JSON.stringify(palette);
-        // Recheck NULL plus image revision at write time. Never overwrite an existing palette.
+        // 書き込み時にNULLと画像のリビジョンを再確認し、既存のパレットは上書きしない。
         const [updated] = await query(`UPDATE costume SET color_palette = ${quote(json)}
           WHERE id = ${quote(row.id)} AND color_palette IS NULL
           AND thumbnail_url = ${quote(row.thumbnail_url)} AND palette_revision = ${Number(row.palette_revision)} RETURNING id;`);

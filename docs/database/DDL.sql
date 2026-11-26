@@ -47,6 +47,8 @@ CREATE TABLE costume (
   category TEXT NOT NULL DEFAULT '',
   description TEXT NOT NULL DEFAULT '',
   thumbnail_url TEXT CHECK(thumbnail_url IS NULL OR thumbnail_url LIKE 'https://%'),
+  thumbnail_source_title TEXT,
+  thumbnail_source_url TEXT CHECK(thumbnail_source_url IS NULL OR trim(thumbnail_source_url) = '' OR thumbnail_source_url LIKE 'https://%'),
   color_palette TEXT DEFAULT NULL CHECK(color_palette IS NULL OR json_valid(color_palette)),
   palette_revision INTEGER NOT NULL DEFAULT 0,
   family_key TEXT CHECK(family_key IS NULL OR length(trim(family_key)) > 0),

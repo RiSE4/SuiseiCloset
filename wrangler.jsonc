@@ -17,6 +17,6 @@
 		"APP_ORIGIN": "https://suisei-closet.pages.dev/",
 		"DISCORD_CLIENT_ID": "1571121216800952331",
 		"DISCORD_REDIRECT_URI": "https://suisei-closet.pages.dev/auth/callback",
-		"OAUTH_ENABLED": "true"
+		"OAUTH_ENABLED": "false"
 	}
 }

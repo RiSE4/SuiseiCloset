@@ -6,6 +6,16 @@
   color-scheme: dark
 }
 
+.footer-links {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  align-items: flex-start;
+  text-align: left;
+  margin-top: 6px;
+}
+
 * {
   box-sizing: border-box
 }

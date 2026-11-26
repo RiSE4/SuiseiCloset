@@ -15,9 +15,11 @@ const adminRoute = computed(() => route.matched.some(record => record.meta.requi
 const editorRoute = computed(() => route.matched.some(record => record.meta.requiresEditor));
 const canEditCostumes = computed(() => ['admin', 'editor'].includes(authState.user?.role || ''));
 const loginRoute = computed(() => route.path === '/' || route.path === '/login');
+const publicStatic = computed(() => route.meta.publicStatic === true);
 const loginPath = computed(() => authState.oauthEnabled ? '/' : '/login');
 
 watch([() => authState.status, () => route.fullPath], () => {
+  if (publicStatic.value) return;
   if (authState.status === 'loading' || authState.status === 'error') {
     return;
   }
@@ -31,7 +33,10 @@ watch([() => authState.status, () => route.fullPath], () => {
   }
 });
 
-onMounted(refreshAuth);
+onMounted(() => { if (!publicStatic.value) void refreshAuth(); });
+watch(publicStatic, (isStatic, wasStatic) => {
+  if (wasStatic && !isStatic) void refreshAuth();
+});
 
 watch(() => route.fullPath, () => { menuOpen.value = false; });
 watch(menuOpen, open => { document.body.style.overflow = open ? 'hidden' : ''; });
@@ -167,7 +172,8 @@ async function signOut() {
 
     <main class="shell page-main" :class="{ 'login-main': loginRoute }">
       <p v-if="actionError" class="message error" role="alert">{{ actionError }}</p>
-      <div v-if="authState.status === 'loading'" class="state-panel" role="status">
+      <RouterView v-if="publicStatic" />
+      <div v-else-if="authState.status === 'loading'" class="state-panel" role="status">
         <span class="loading-spinner" aria-hidden="true"></span>
         <span>認証状態を確認しています…</span>
       </div>
@@ -202,7 +208,10 @@ async function signOut() {
 
     <footer class="site-footer shell">© 2026 Avio.<br>掲載されている資料の著作権は製作者に帰属します。<br>
       本サイトは非公式のファンメイドです。関係する権利者による公式の提供・承認・後援を示すものではありません。<br>
-      <a href="/third-party-licenses.txt" target="_blank" rel="noopener">Third Party Licenses</a>
+      <nav class="footer-links" aria-label="サイト情報">
+        <RouterLink to="/about">サービス概要</RouterLink>
+        <a href="/third-party-licenses.txt" target="_blank" rel="noopener">Third Party Licenses</a>
+      </nav>
     </footer>
   </div>
 </template>

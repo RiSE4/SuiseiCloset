@@ -3,4 +3,5 @@ import App from './App.vue';
 import { router } from './app/router';
 import './style.css';
 
-createApp(App).use(router).mount('#app');
+const app = createApp(App).use(router);
+void router.isReady().then(() => app.mount('#app'));

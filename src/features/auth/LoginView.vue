@@ -51,7 +51,7 @@ async function signInLocally() {
         </svg>
       </span>
       <p class="eyebrow">Welcome to Suisei Closet</p>
-      <h2 id="login-title">{{ optional ? '観測者としてログイン' : '彗星の軌跡を探す' }}</h2>
+      <h2 id="login-title">{{ optional ? '観測者としてログイン' : '彗星の軌跡をたどる' }}</h2>
       <p class="login-description">{{ optional ? '過去の資料を管理' : '星街すいせいの歴代衣装の資料図鑑' }}</p>
     </div>
 

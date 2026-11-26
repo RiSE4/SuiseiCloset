@@ -23,6 +23,14 @@ Vue 3・TypeScriptの画面、Cloudflare Pages FunctionsのAPI、D1のDBで構�
 
 Discord OAuthで認証する。`OAUTH_ENABLED=false` の場合だけ匿名閲覧を許可し、それ以外は登録済みの有効なアカウントでログインする。権限は `member`（閲覧）、`editor`（衣装・資料の管理）、`admin`（観測者管理を含む全機能）の3種類。画面とAPIの両方で権限を確認する。
 
+`/about` と未定義の画面URLは設定にかかわらず認証確認APIを呼ばずに表示する。サービス説明・各方針は `src/views/AboutView.vue`、最終更新日と問い合わせ先は `src/views/about-content.ts` で管理する。問い合わせ先は公開前に確定する。
+
+## クローラと公開APIのキャッシュ
+
+全HTMLに `noindex`、静的応答には `public/_headers`、API・認証応答にはサーバー側で `X-Robots-Tag: noindex` を付ける。`robots.txt` は管理画面・API・認証経路のみクロールを拒否し、一般ページではクローラが `noindex` を読めるようにする。アクセス制御の代替にはならない。
+
+`public/_routes.json` は `/api/*`・`/auth/*` だけをFunctions対象とする。不明なAPIパス・メソッドはセッションのD1照会前に拒否する。匿名閲覧モードでCookie・Authorizationのない公開一覧・詳細・候補APIの成功応答だけをCache APIで30秒保持する。ブラウザ向けは `no-store` を維持し、管理用・認証済み・エラー応答は共有しない。Functions実行数自体は減らず、キャッシュヒット時のD1・外部参照元取得を抑える。公開取り下げ後も最大30秒の古い応答が残り得る。
+
 ## 観測者の管理
 
 adminは `/admin/users` で観測者を追加・編集・削除できる。Discord IDと権限を管理し、表示名はDiscordログイン時に取得する。自分自身の権限を失う操作は制限する。実装は `src/features/users/` と `src/server/users/` を参照する。

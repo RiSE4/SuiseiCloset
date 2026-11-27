@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"node --import ./scripts/wrangler-local-env.mjs node_modules/wrangler/bin/wrangler.js pages dev public --ip 127.0.0.1 --port 8789 --local-protocol=https\"",
-    "build": "vue-tsc --noEmit && vite build",
+    "search:prepare": "node scripts/search-normalization/dataset.mjs",
+    "search:rebuild:local": "node --experimental-strip-types scripts/search-normalization/rebuild-local-index.mjs",
+    "dev": "node scripts/search-normalization/prepare-assets.mjs && concurrently -k \"vite\" \"node --import ./scripts/wrangler-local-env.mjs node_modules/wrangler/bin/wrangler.js pages dev public --ip 127.0.0.1 --port 8789 --local-protocol=https\"",
+    "build": "node scripts/search-normalization/prepare-assets.mjs && vue-tsc --noEmit && vite build",
     "preview": "node --import ./scripts/wrangler-local-env.mjs node_modules/wrangler/bin/wrangler.js pages dev dist",
     "db:init": "wrangler d1 execute suisei-closet --local --file=docs/database/DDL.sql",
     "db:dev-user": "wrangler d1 execute suisei-closet --local --file=scripts/dev-user.sql",
@@ -30,10 +32,12 @@
     "@vitejs/plugin-vue": "6.0.2",
     "concurrently": "9.2.5",
     "esbuild": "0.28.2",
+    "kuromoji": "0.1.2",
     "playwright": "1.62.1",
     "typescript": "5.9.3",
     "vite": "7.3.8",
     "vue-tsc": "3.1.0",
+    "wanakana": "5.3.1",
     "wrangler": "4.161.0"
   },
   "volta": {

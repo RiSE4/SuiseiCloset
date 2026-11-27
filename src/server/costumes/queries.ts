@@ -1,6 +1,7 @@
 import type { AdminCostumeDto, CostumeDetailDto, CostumeListResponse, CostumeSourceDto, CostumeSummaryDto } from '../../features/costumes/costume-model';
 import type { Costume, CostumeSource } from '../../features/costumes/costume-record';
 import { parseKeywordsJson } from '../../features/costumes/keywords';
+import { matchesSearchText } from '../../lib/search-normalization/word-search';
 import { fail, json } from '../http';
 import type { Context } from '../types';
 import { paging } from './validation';
@@ -73,11 +74,6 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
   if (admin && published !== null) {
     clauses.push(`is_published=${published === 'true' ? 1 : 0}`);
   }
-  //キーワード（部分一致）
-  if (q) {
-    clauses.push('instr(search_text, ?) > 0');
-    params.push(q);
-  }
   //カテゴリ（完全一致）
   if (category) {
     clauses.push('category = ?');
@@ -87,9 +83,18 @@ export async function list(ctx: Context, admin: boolean): Promise<Response> {
     clauses.push('debut_date >= ? AND debut_date < ?');
     params.push(`${pubYear}-01-01`, `${pubYear + 1}-01-01`);
   }
+  if (q) {
+    // 保存済みの軽量な単語索引だけを照合
+    const candidates = await ctx.env.DB.prepare(
+      `SELECT c.id,c.search_text FROM costume c WHERE ${clauses.join(' AND ')}`
+    ).bind(...params).all<Pick<Costume, 'id' | 'search_text'>>();
+    const ids = candidates.results.filter(row => matchesSearchText(row.search_text, q)).map(row => row.id);
+    clauses.push('c.id IN (SELECT value FROM json_each(?))');
+    params.push(JSON.stringify(ids));
+  }
   const where = clauses.join(' AND ');
 
-  const totalQuery = `SELECT count(*) AS total FROM costume WHERE ${where}`;
+  const totalQuery = `SELECT count(*) AS total FROM costume c WHERE ${where}`;
   const totalResult = await ctx.env.DB.prepare(totalQuery).bind(...params).first<{ total: number }>();
   const dataQuery = `SELECT ${summaryColumns} FROM ${summaryFrom} WHERE ${where} ORDER BY c.debut_date DESC, c.id LIMIT ? OFFSET ?`;
   const rows = await ctx.env.DB.prepare(dataQuery).bind(...params, limit, offset).all<SummaryRow>();

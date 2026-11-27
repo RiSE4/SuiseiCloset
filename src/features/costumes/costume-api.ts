@@ -1,5 +1,6 @@
 import type { ColorPalette } from './color-palette';
 import { requestJson } from '../../shared/api/request';
+import { searchSource } from '../../lib/search-normalization/index-data';
 import type { AdminCostumeDto, AdminCostumeSummaryDto, CostumeCreateRequest, CostumeDetailDto, CostumeListResponse, CostumeSourceCreateRequest, CostumeSourceCreateResponse, CostumeSourceDto, CostumeSourceUpdateRequest, CostumeUpdateRequest } from './costume-model';
 
 /**
@@ -69,12 +70,26 @@ export const getAdminCostumeDetail = (id: string, signal?: AbortSignal) => reque
 /**
  * 管理用：衣装の新規登録と、採番されたIDを含む詳細の返却
  */
-export const createCostume = (payload: CostumeCreateRequest) => requestJson<AdminCostumeDto>('/api/admin/costumes', undefined, 'POST', payload);
+export async function createCostume(payload: CostumeCreateRequest) {
+  const { generateSearchIndex } = await import('./search-index-client');
+  const searchIndex = await generateSearchIndex(searchSource(payload.name, payload.keywords ?? [], payload.description));
+  return requestJson<AdminCostumeDto>('/api/admin/costumes', undefined, 'POST', { ...payload, searchIndex });
+}
 
 /**
  * 管理用：更新と、更新結果の返却
  */
-export const updateCostume = (id: string, payload: CostumeUpdateRequest) => requestJson<AdminCostumeDto>(`/api/admin/costumes/${encodeURIComponent(id)}`, undefined, 'PATCH', payload);
+export async function updateCostume(id: string, payload: CostumeUpdateRequest, current?: Pick<CostumeDetailDto, 'name' | 'keywords' | 'description'>) {
+  const path = `/api/admin/costumes/${encodeURIComponent(id)}`;
+  if (!['name', 'keywords', 'description'].some(key => Object.hasOwn(payload, key))) {
+    return requestJson<AdminCostumeDto>(path, undefined, 'PATCH', payload);
+  }
+  const { generateSearchIndex } = await import('./search-index-client');
+  const source = current ?? await getAdminCostumeDetail(id);
+  const searchIndex = await generateSearchIndex(searchSource(payload.name ?? source.name,
+    payload.keywords ?? source.keywords, payload.description ?? source.description));
+  return requestJson<AdminCostumeDto>(path, undefined, 'PATCH', { ...payload, searchIndex });
+}
 
 /**
  * 管理用：衣装及び紐づく資料の削除

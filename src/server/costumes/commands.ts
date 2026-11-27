@@ -2,7 +2,8 @@ import type { CostumeSourceCreateResponse } from '../../features/costumes/costum
 import type { Context, User } from '../types';
 import { fail, json, readJson } from '../http';
 import type { Costume, CostumeSource } from '../../features/costumes/costume-record';
-import { makeSearchText, parseKeywordsJson } from '../../features/costumes/keywords';
+import { parseKeywordsJson } from '../../features/costumes/keywords';
+import { searchTextFor } from './search-index';
 import { columnList, detail, sourceColumns, sourceDto } from './queries';
 import { relatedKey } from './relations';
 import { costumeInput, has, InputError, sourceInput } from './validation';
@@ -22,8 +23,8 @@ const audit = (ctx: Context, user: User, action: string, id?: string) => {
 };
 
 /** 必須のJSON本文を読み、不正な形式や未指定の場合は入力エラーにする。 */
-async function requiredJson(ctx: Context): Promise<Record<string, unknown>> {
-  const body = await readJson(ctx);
+async function requiredJson(ctx: Context, limit = 20000): Promise<Record<string, unknown>> {
+  const body = await readJson(ctx, limit);
   if (!body) {
     throw new InputError('JSONが必要です');
   }
@@ -38,13 +39,13 @@ function loadSource(ctx: Context, id: number): Promise<CostumeSource | null> {
 }
 
 /** 関連先のグループ設定を、衣装本体と同じバッチへ追加するためのSQLを作る。 */
-function relatedUpdate(ctx: Context, id: string, familyKey: string, guard?: { id: string; name?: string; keywords?: string }): D1PreparedStatement {
+function relatedUpdate(ctx: Context, id: string, familyKey: string, guard?: { id: string; name?: string; keywords?: string; description?: string }): D1PreparedStatement {
   return ctx.env.DB.prepare(`
     UPDATE costume
     SET family_key = CASE WHEN family_key IS NULL THEN ? ELSE '' END,
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?${guard ? ` AND EXISTS(SELECT 1 FROM costume WHERE id = ?${guard.name !== undefined ? ' AND name = ? AND keywords_json = ?' : ''})` : ''}
-  `).bind(familyKey, id, ...(guard ? [guard.id, ...(guard.name !== undefined ? [guard.name, guard.keywords] : [])] : []));
+    WHERE id = ?${guard ? ` AND EXISTS(SELECT 1 FROM costume WHERE id = ?${guard.name !== undefined ? ' AND name = ? AND keywords_json = ? AND description = ?' : ''})` : ''}
+  `).bind(familyKey, id, ...(guard ? [guard.id, ...(guard.name !== undefined ? [guard.name, guard.keywords, guard.description] : [])] : []));
 }
 
 function patchSet(fields: Record<string, unknown>, columns: Record<string, string>) {
@@ -72,7 +73,7 @@ function normalizeSourceOrder(ctx: Context, costumeId: string): D1PreparedStatem
  * 衣装の新規登録
  */
 export async function createCostume(ctx: Context, user: User): Promise<Response> {
-  const body = await requiredJson(ctx);
+  const body = await requiredJson(ctx, 1024 * 1024);
   const fields = costumeInput(body, true);
   const name = fields.name;
   const debutDate = fields.debutDate ?? null;
@@ -81,6 +82,9 @@ export async function createCostume(ctx: Context, user: User): Promise<Response>
   const thumbnailUrl = fields.thumbnailUrl ?? null;
   const keywords = fields.keywords ?? [];
   const isPublished = fields.isPublished ? 1 : 0;
+  if (!fields.searchIndex) throw new InputError('検索用データが必要です。画面を再読み込みして保存してください');
+  const searchText = searchTextFor(fields.searchIndex, { name, keywords, description });
+  if (searchText === null) throw new InputError('検索用データと衣装情報が一致しません');
 
   const relatedId = fields.relatedCostumeId;
   const relation = relatedId ? await relatedKey(ctx, relatedId, null, null) : null;
@@ -107,7 +111,7 @@ export async function createCostume(ctx: Context, user: User): Promise<Response>
   `).bind(
     name, debutDate, category, description, thumbnailUrl,
     fields.thumbnailSourceTitle ?? null, fields.thumbnailSourceUrl ?? null,
-    ...familyParams, JSON.stringify(keywords), makeSearchText(name, keywords),
+    ...familyParams, JSON.stringify(keywords), searchText,
     isPublished
   );
 
@@ -138,8 +142,9 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
   ).bind(id).first<Costume>();
   let current = await loadCurrent();
   if (!current) return fail('衣装が見つかりません', 404);
-  const fields = costumeInput(await requiredJson(ctx), false);
-  const changesSearch = has(fields, 'name') || has(fields, 'keywords');
+  const fields = costumeInput(await requiredJson(ctx, 1024 * 1024), false);
+  const changesSearch = has(fields, 'name') || has(fields, 'keywords') || has(fields, 'description') || has(fields, 'searchIndex');
+  if (changesSearch && !fields.searchIndex) throw new InputError('検索用データが必要です。画面を再読み込みして保存してください');
 
   // 競合によって処理が無制限に続かないよう再試行回数に上限設定
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -154,7 +159,7 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
       const index = patch.assignments.indexOf('is_published = ?');
       patch.values[index] = fields.isPublished ? 1 : 0;
     }
-    const guard = changesSearch ? { id, name: current.name, keywords: current.keywords_json } : undefined;
+    const guard = changesSearch ? { id, name: current.name, keywords: current.keywords_json, description: current.description } : undefined;
     if (has(fields, 'keywords')) {
       patch.assignments.push('keywords_json = ?');
       patch.values.push(JSON.stringify(fields.keywords));
@@ -162,8 +167,11 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
     if (changesSearch) {
       const name = fields.name ?? current.name;
       const keywords = fields.keywords ?? parseKeywordsJson(current.keywords_json);
+      const description = fields.description ?? current.description;
+      const searchText = searchTextFor(fields.searchIndex!, { name, keywords, description });
+      if (searchText === null) return fail('衣装情報が変更されました。画面を再読み込みして保存してください', 409);
       patch.assignments.push('search_text = ?');
-      patch.values.push(makeSearchText(name, keywords));
+      patch.values.push(searchText);
     }
 
     const statements: D1PreparedStatement[] = [];
@@ -184,9 +192,9 @@ export async function updateCostume(ctx: Context, user: User, id: string): Promi
     const updateIndex = statements.length;
     statements.push(ctx.env.DB.prepare(`
       UPDATE costume SET ${patch.assignments.join(', ')}
-      WHERE id = ?${changesSearch ? ' AND name = ? AND keywords_json = ?' : ''}
+      WHERE id = ?${changesSearch ? ' AND name = ? AND keywords_json = ? AND description = ?' : ''}
       RETURNING id
-    `).bind(...patch.values, id, ...(guard ? [guard.name, guard.keywords] : [])));
+    `).bind(...patch.values, id, ...(guard ? [guard.name, guard.keywords, guard.description] : [])));
     // 比較更新の条件が不一致なら更新も監査記録も行わない
     statements.push(ctx.env.DB.prepare(`
       INSERT INTO audit_log(actor_discord_id, action, target_id)

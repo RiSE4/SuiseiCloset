@@ -74,9 +74,8 @@ export function checkOrigin(ctx: Context) {
 /**
  * application/json本文の読み込み
  */
-export async function readJson(ctx: Context): Promise<Record<string, unknown> | null> {
+export async function readJson(ctx: Context, limit = 20000): Promise<Record<string, unknown> | null> {
   if (!ctx.request.headers.get('Content-Type')?.startsWith('application/json')) return null;
-  const limit = 20000;
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     if (Number(ctx.request.headers.get('Content-Length') || 0) > limit) {

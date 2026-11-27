@@ -19,7 +19,8 @@ export async function publicRead(ctx: Context, load: () => Promise<Response>): P
   let cache: Cache;
 
   try {
-    cache = await caches.open('suisei-public-v1');
+    // 単語索引への移行前に作られた検索結果とキャッシュを分ける
+    cache = await caches.open('suisei-public-v2');
     const hit = await cache.match(key);
 
     if (hit) {

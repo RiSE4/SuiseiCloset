@@ -6,3 +6,5 @@ dist/
 .backups/
 /backup.sql
 .artifact-work/
+/.cache/
+/public/search-normalization/

@@ -1,0 +1,9 @@
+{
+  "repository": "VOICEVOX/kanalizer-dataset",
+  "revision": "9920e8f5503e17a8b0647e0265e47923255df5dd",
+  "file": "dataset/dataset.jsonl",
+  "sha256": "554dcec40d62afa1a482174c62ba503b1c9b875278f307d91afa4c1a4770dbeb",
+  "bytes": 5570765,
+  "license": "MIT",
+  "url": "https://huggingface.co/datasets/VOICEVOX/kanalizer-dataset/resolve/9920e8f5503e17a8b0647e0265e47923255df5dd/dataset/dataset.jsonl"
+}

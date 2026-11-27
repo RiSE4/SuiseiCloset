@@ -301,7 +301,7 @@ async function save() {
     }
     const sourceWarning = saveError.value;
     const changedThumbnail = isNew.value || data.thumbnailUrl !== savedCostume.value?.thumbnailUrl;
-    const detail = isNew.value ? await createCostume(data) : await updateCostume(id.value, data);
+    const detail = isNew.value ? await createCostume(data) : await updateCostume(id.value, data, savedCostume.value ?? undefined);
     fill(detail);
     paletteMessage.value = '';
     if (changedThumbnail && detail.thumbnailUrl) await generatePalette(detail);
@@ -321,7 +321,7 @@ async function save() {
   } catch (cause) {
     //関連グループの競合、権限不足、削除済みの対象はそれぞれ理由を表示
     if (cause instanceof ApiError && cause.status === 409)
-      saveError.value = '関連衣装のグループが異なるため統合できません。選択を見直してください。';
+      saveError.value = cause.message;
     else if (cause instanceof ApiError && cause.status === 403)
       saveError.value = '管理者権限がありません。';
     else if (cause instanceof ApiError && cause.status === 404)

@@ -74,6 +74,7 @@ export interface CostumeListResponse<T extends CostumeSummaryDto = CostumeSummar
  * 新規登録用データ
  */
 export interface CostumeCreateRequest {
+  searchIndex?: import('../../lib/search-normalization/index-data').SearchIndex;
   thumbnailSourceTitle?: string | null;
   thumbnailSourceUrl?: string | null;
   name: string;

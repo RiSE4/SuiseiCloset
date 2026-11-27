@@ -2,6 +2,7 @@ import type { CostumeCreateRequest, CostumeUpdateRequest, CostumeSourceCreateReq
 import { normalizeKeyword, validateKeywords } from '../../features/costumes/keywords';
 import { validateHttpsUrl } from '../../features/costumes/validate-https-url';
 import { isValidDebutDate } from '../../features/costumes/debut-date';
+import { validSearchIndex } from './search-index';
 
 /**
  * 部分更新用：パラメータの有無を判定（nullなどの明示指定をまとめない）
@@ -10,7 +11,7 @@ export const has = (body: object, key: string) =>
   Object.prototype.hasOwnProperty.call(body, key);
 
 /** 衣装の登録・更新で受け付ける項目 */
-const costumeKeys = new Set(['name', 'debutDate', 'category', 'description', 'thumbnailUrl', 'thumbnailSourceTitle', 'thumbnailSourceUrl', 'keywords', 'relatedCostumeId', 'isPublished']);
+const costumeKeys = new Set(['name', 'debutDate', 'category', 'description', 'thumbnailUrl', 'thumbnailSourceTitle', 'thumbnailSourceUrl', 'keywords', 'relatedCostumeId', 'isPublished', 'searchIndex']);
 
 /** 資料の登録・更新で受け付ける項目 */
 const sourceKeys = new Set(['title', 'thumbnailUrl', 'sourceUrl']);
@@ -96,6 +97,10 @@ export function costumeInput(body: Record<string, unknown>, create: boolean): Co
   }
 
   const fields: CostumeUpdateRequest = {};
+  if (has(body, 'searchIndex')) {
+    if (!validSearchIndex(body.searchIndex)) throw new InputError('検索用データが不正です');
+    fields.searchIndex = body.searchIndex;
+  }
 
   if (has(body, 'thumbnailSourceTitle')) {
     fields.thumbnailSourceTitle = body.thumbnailSourceTitle === null ? null : text(body.thumbnailSourceTitle, '参照元', 500) || null;

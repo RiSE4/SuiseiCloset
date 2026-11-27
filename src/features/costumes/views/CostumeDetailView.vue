@@ -146,7 +146,7 @@ async function toggleEditing() {
     const updated = await updateCostume(detail.value.id, {
       name, debutDate, keywords, thumbnailUrl,
       ...(changedAttribution ? { thumbnailSourceTitle, thumbnailSourceUrl } : {})
-    });
+    }, detail.value);
     detail.value = {
       ...detail.value, name: updated.name, debutDate: updated.debutDate,
       debutYear: updated.debutYear, keywords: updated.keywords,

@@ -177,7 +177,7 @@ const journey = [
           サービスに関するお問い合わせは下記までお願いします。<br>
         </p>
         <p class="contact-address">
-          <span>お問い合わせ先</span><a href="mailto:avio5912.development@mail.com">avio5912.development@mail.com</a>
+          <span>お問い合わせ先</span><a href="mailto:avio5912.development@gmail.com">avio5912.development@gmail.com</a>
         </p>
       </section>
       <p class="about-updated">最終更新日：<time datetime="2026-11-26">2026年11月26日</time></p>
